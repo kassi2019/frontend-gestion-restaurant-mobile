@@ -1,16 +1,25 @@
 {
   "expo": {
-    "name": "gestion-resto-mobile",
+    "name": "RestoPro",
+    "newArchEnabled": false,
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "L'application accède à vos photos pour les menus.",
+          "cameraPermission": "L'application utilise l'appareil photo."
+        }
+      ]
+    ],
     "slug": "gestion-resto-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#E86B2A"
     },
     "ios": {
       "supportsTablet": true
@@ -18,10 +27,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#E86B2A"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.fabricekassi.gestionrestomobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
