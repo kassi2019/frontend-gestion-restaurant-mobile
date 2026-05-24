@@ -10,17 +10,20 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import * as ImagePicker from 'expo-image-picker';
-import { RootState } from '../store';
+import { RootState, AppDispatch } from '../store';
+import { updateUser } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import { authApi } from '../services/api';
 import { showToast } from '../services/toast';
+import PasswordInput from '../components/PasswordInput';
 
 const API_URL = 'http://192.168.1.7:3000';
 
 export default function ProfileScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
+  const dispatch = useDispatch<AppDispatch>();
   const [photo, setPhoto] = useState<string | null>(null);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -49,8 +52,9 @@ export default function ProfileScreen() {
     try {
       const formData = new FormData();
       formData.append('image', { uri: photo, type: 'image/jpeg', name: 'profile.jpg' } as any);
-      await authApi.uploadPhoto(formData);
+      const res = await authApi.uploadPhoto(formData);
       showToast.success('Photo de profil mise à jour');
+      dispatch(updateUser({ photo: res.data?.photo }));
       setPhoto(null);
     } catch (err: any) {
       showToast.error(err.response?.data?.message || 'Erreur lors de la mise à jour');
@@ -125,22 +129,8 @@ export default function ProfileScreen() {
       {/* Change Password */}
       <View style={styles.pwdCard}>
         <Text style={styles.sectionTitle}>Changer le mot de passe</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Ancien mot de passe"
-          placeholderTextColor={Colors.textLight}
-          secureTextEntry
-          value={oldPassword}
-          onChangeText={setOldPassword}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Nouveau mot de passe"
-          placeholderTextColor={Colors.textLight}
-          secureTextEntry
-          value={newPassword}
-          onChangeText={setNewPassword}
-        />
+        <PasswordInput value={oldPassword} onChangeText={setOldPassword} placeholder="Ancien mot de passe" />
+        <PasswordInput value={newPassword} onChangeText={setNewPassword} placeholder="Nouveau mot de passe" />
         <TouchableOpacity style={[styles.pwdBtn, loadingPwd && { opacity: 0.6 }]} onPress={handleChangePassword} disabled={loadingPwd}>
           {loadingPwd ? <ActivityIndicator color={Colors.textWhite} /> : <Text style={styles.pwdBtnText}>Modifier le mot de passe</Text>}
         </TouchableOpacity>

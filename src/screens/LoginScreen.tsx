@@ -20,6 +20,7 @@ import { RootState, AppDispatch } from '../store';
 import { Colors } from '../theme/colors';
 import { authApi } from '../services/api';
 import { showToast } from '../services/toast';
+import PasswordInput from '../components/PasswordInput';
 
 const { width } = Dimensions.get('window');
 
@@ -134,17 +135,11 @@ export default function LoginScreen() {
           {/* Password input */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mot de passe</Text>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputIcon}>🔒</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor={Colors.textLight}
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
-            </View>
+            <PasswordInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+            />
           </View>
 
           {/* Login button */}
@@ -186,13 +181,11 @@ export default function LoginScreen() {
               value={forgotPhone}
               onChangeText={setForgotPhone}
             />
-            <TextInput
-              style={styles.forgotInput}
-              placeholder="Nouveau mot de passe"
-              placeholderTextColor={Colors.textLight}
-              secureTextEntry
+            <PasswordInput
               value={forgotPassword}
               onChangeText={setForgotPassword}
+              placeholder="Nouveau mot de passe"
+              style={styles.forgotInput}
             />
             <TouchableOpacity
               style={[styles.forgotSubmit, forgotLoading && { opacity: 0.6 }]}

@@ -18,6 +18,8 @@ import { usersApi, authApi } from '../services/api';
 import { showToast } from '../services/toast';
 import ActionSheet from '../components/ActionSheet';
 import ModalPicker from '../components/ModalPicker';
+import PasswordInput from '../components/PasswordInput';
+import useResponsive from '../hooks/useResponsive';
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'Admin', MANAGER: 'Manager', SERVEUR: 'Serveur',
@@ -44,6 +46,7 @@ const ROLE_OPTIONS = ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER
 export default function UsersScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const { sp } = useResponsive();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -233,7 +236,7 @@ export default function UsersScreen() {
             <Text style={styles.fieldLabel}>Téléphone</Text>
             <TextInput style={styles.field} placeholder="Ex: 0101010101" keyboardType="phone-pad" value={createForm.telephone} onChangeText={(t) => setCreateForm({ ...createForm, telephone: t })} />
             <Text style={styles.fieldLabel}>Mot de passe</Text>
-            <TextInput style={styles.field} placeholder="Mot de passe" secureTextEntry value={createForm.mot_de_passe} onChangeText={(t) => setCreateForm({ ...createForm, mot_de_passe: t })} />
+            <PasswordInput value={createForm.mot_de_passe} onChangeText={(t) => setCreateForm({ ...createForm, mot_de_passe: t })} placeholder="Mot de passe" />
             <Text style={styles.fieldLabel}>Rôle</Text>
             <View style={styles.chipRow}>
               {ROLE_OPTIONS.map((role) => (
@@ -268,7 +271,7 @@ export default function UsersScreen() {
               ))}
             </View>
             <Text style={styles.fieldLabel}>Nouveau mot de passe (optionnel)</Text>
-            <TextInput style={styles.field} placeholder="Laisser vide pour ne pas changer" secureTextEntry value={editForm.mot_de_passe} onChangeText={(t) => setEditForm({ ...editForm, mot_de_passe: t })} />
+            <PasswordInput value={editForm.mot_de_passe} onChangeText={(t) => setEditForm({ ...editForm, mot_de_passe: t })} placeholder="Laisser vide pour ne pas changer" />
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleEdit}><Text style={styles.saveText}>Enregistrer</Text></TouchableOpacity>

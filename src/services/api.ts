@@ -98,6 +98,7 @@ export const serveurTablesApi = {
 export const commandesApi = {
   getAll: () => api.get('/commandes'),
   getByServeur: () => api.get('/commandes/serveur'),
+  getByTable: (tableId: number) => api.get(`/commandes/table/${tableId}`),
   getByCuisine: () => api.get('/commandes/cuisine'),
   getByBar: () => api.get('/commandes/bar'),
   updateStatut: (id: number, statut: string) =>

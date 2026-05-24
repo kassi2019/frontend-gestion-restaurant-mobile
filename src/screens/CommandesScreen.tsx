@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import { commandesApi, tablesApi, menuApi } from '../services/api';
 import { showToast } from '../services/toast';
+import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
+import useResponsive from '../hooks/useResponsive';
 
 const STATUT_COLORS: Record<string, string> = {
   EN_ATTENTE: Colors.warning,
@@ -40,11 +42,16 @@ const STATUT_LABELS: Record<string, string> = {
 export default function CommandesScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const devise = useSelector(selectDevise);
-  const isServeur = user?.role === 'SERVEUR' || user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isServeur = user?.role === 'SERVEUR';
+  const { sp, fs } = useResponsive();
   const [commandes, setCommandes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const [tab, setTab] = useState<'encours' | 'payees'>('encours');
+  const [filterDate, setFilterDate] = useState(toDateStr(new Date()));
+  const [showFilterDatePicker, setShowFilterDatePicker] = useState(false);
 
   // Create order state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -55,10 +62,11 @@ export default function CommandesScreen() {
 
   const loadCommandes = async () => {
     try {
-      let { data } = await commandesApi.getByServeur();
+      let { data } = isManager
+        ? await commandesApi.getAll()
+        : await commandesApi.getByServeur();
       setCommandes(Array.isArray(data) ? data : []);
     } catch (err) {
-      showToast.error('Impossible de charger les commandes');
       setCommandes([]);
     } finally {
       setLoading(false);
@@ -100,17 +108,11 @@ export default function CommandesScreen() {
   const addToCart = (menu: any) => {
     setCart((prev) => {
       const existing = prev.find((c) => c.menuId === menu.id);
-      if (existing) {
-        return prev.map((c) => c.menuId === menu.id ? { ...c, quantite: c.quantite + 1 } : c);
-      }
+      if (existing) return prev.map((c) => c.menuId === menu.id ? { ...c, quantite: c.quantite + 1 } : c);
       return [...prev, { menuId: menu.id, nom: menu.nom, prix: Number(menu.prix), quantite: 1 }];
     });
   };
-
-  const removeFromCart = (menuId: number) => {
-    setCart((prev) => prev.filter((c) => c.menuId !== menuId));
-  };
-
+  const removeFromCart = (menuId: number) => setCart((prev) => prev.filter((c) => c.menuId !== menuId));
   const updateQty = (menuId: number, delta: number) => {
     setCart((prev) => prev.map((c) => {
       if (c.menuId !== menuId) return c;
@@ -123,10 +125,7 @@ export default function CommandesScreen() {
     if (!selectedTableId) return Alert.alert('Erreur', 'Sélectionnez une table');
     if (cart.length === 0) return Alert.alert('Erreur', 'Ajoutez au moins un article');
     try {
-      await commandesApi.createFromClient({
-        tableId: selectedTableId,
-        articles: cart.map((c) => ({ menuId: c.menuId, quantite: c.quantite })),
-      });
+      await commandesApi.createFromClient({ tableId: selectedTableId, articles: cart.map((c) => ({ menuId: c.menuId, quantite: c.quantite })) });
       setShowCreateModal(false);
       showToast.success('Commande créée');
       loadCommandes();
@@ -134,6 +133,61 @@ export default function CommandesScreen() {
       showToast.error(err.response?.data?.message || 'Impossible de créer la commande');
     }
   };
+
+  const normalizeDate = (dateStr: string) => dateStr ? dateStr.split('T')[0] : '';
+
+  // Commandes en cours (non payées) groupées par session (chaque arrivée client = une session)
+  const commandesEnCours = useMemo(() => {
+    const filtered = commandes.filter((c) => {
+      if (c.statut === 'PAYEE' || c.statut === 'ANNULEE') return false;
+      if (filterDate && normalizeDate(c.dateCommande) !== filterDate) return false;
+      return true;
+    });
+    // Grouper par sessionId (des clients différents = sessions différentes)
+    const grouped: Record<string, { sessionId: number; tableNum: string; tableId: number; dateArrivee: string; commandes: any[]; total: number }> = {};
+    filtered.forEach((c) => {
+      const key = String(c.sessionId || 's' + c.tableId + '-' + c.id);
+      if (!grouped[key]) {
+        grouped[key] = {
+          sessionId: c.sessionId || 0,
+          tableNum: c.table?.numero || '?',
+          tableId: c.tableId,
+          dateArrivee: c.session?.dateArrivee || c.dateCommande,
+          commandes: [],
+          total: 0,
+        };
+      }
+      grouped[key].commandes.push(c);
+      grouped[key].total += Number(c.montantTotal);
+    });
+    return Object.values(grouped);
+  }, [commandes, filterDate]);
+
+  // Commandes payées, groupées par session
+  const commandesPayees = useMemo(() => {
+    const filtered = commandes.filter((c) => {
+      if (c.statut !== 'PAYEE') return false;
+      if (filterDate && normalizeDate(c.dateCommande) !== filterDate) return false;
+      return true;
+    });
+    const grouped: Record<string, { sessionId: number; tableNum: string; tableId: number; dateArrivee: string; commandes: any[]; total: number }> = {};
+    filtered.forEach((c) => {
+      const key = String(c.sessionId || 'ps' + c.tableId + '-' + c.id);
+      if (!grouped[key]) {
+        grouped[key] = {
+          sessionId: c.sessionId || 0,
+          tableNum: c.table?.numero || '?',
+          tableId: c.tableId,
+          dateArrivee: c.session?.dateArrivee || c.dateCommande,
+          commandes: [],
+          total: 0,
+        };
+      }
+      grouped[key].commandes.push(c);
+      grouped[key].total += Number(c.montantTotal);
+    });
+    return Object.values(grouped);
+  }, [commandes, filterDate]);
 
   const totalCart = cart.reduce((sum, c) => sum + c.prix * c.quantite, 0);
 
@@ -147,107 +201,177 @@ export default function CommandesScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={commandes}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => setExpandedId(expandedId === item.id ? null : item.id)}
-              activeOpacity={0.7}
-            >
-              <View>
-                <Text style={styles.tableLabel}>Table {item.table?.numero}</Text>
-                {item.clientRef && (
-                  <Text style={styles.clientRef}>👤 {item.clientRef}</Text>
-                )}
-                <Text style={styles.date}>
-                  {new Date(item.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </View>
-              <View style={styles.cardRight}>
-                <View style={[styles.statutBadge, { backgroundColor: STATUT_COLORS[item.statut] + '18' }]}>
-                  <Text style={[styles.statutText, { color: STATUT_COLORS[item.statut] }]}>
-                    {STATUT_LABELS[item.statut]}
+      {/* Date filter */}
+      <TouchableOpacity style={styles.dateBar} onPress={() => setShowFilterDatePicker(true)}>
+        <Text style={styles.dateIcon}>📅</Text>
+        <Text style={styles.dateText}>{filterDate ? formatDisplay(filterDate) : 'Toutes les dates'}</Text>
+      </TouchableOpacity>
+
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity style={[styles.tab, tab === 'encours' && styles.tabActive]} onPress={() => setTab('encours')}>
+          <Text style={[styles.tabText, tab === 'encours' && styles.tabTextActive]}>🛒 En cours</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, tab === 'payees' && styles.tabActive]} onPress={() => setTab('payees')}>
+          <Text style={[styles.tabText, tab === 'payees' && styles.tabTextActive]}>💰 Payées</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Onglet En cours */}
+      {tab === 'encours' && (
+        <FlatList
+          data={commandesEnCours}
+          keyExtractor={(item) => 'enc-' + item.sessionId + '-' + item.tableId}
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
+          renderItem={({ item: group }) => (
+            <View style={styles.tableGroup}>
+              <TouchableOpacity
+                style={styles.tableGroupHeader}
+                onPress={() => setExpandedGroup(expandedGroup === 'enc-' + group.sessionId + '-' + group.tableId ? null : 'enc-' + group.sessionId + '-' + group.tableId)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.tableGroupLeft}>
+                  <Text style={styles.tableGroupNum}>Table {group.tableNum}</Text>
+                  <Text style={styles.tableGroupCount}>
+                    {new Date(group.dateArrivee).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • {group.commandes.length} cde(s)
                   </Text>
                 </View>
-                <Text style={styles.total}>{formatPrixDevise(item.montantTotal, devise)}</Text>
-              </View>
-            </TouchableOpacity>
-
-            {expandedId === item.id && (
-              <View style={styles.details}>
-                <Text style={styles.detailsTitle}>Articles</Text>
-                {item.details?.map((d: any) => (
-                  <View key={d.id} style={styles.detailRow}>
-                    <Text style={styles.detailQty}>x{d.quantite}</Text>
-                    <Text style={styles.detailName}>{d.menu?.nom}</Text>
-                    <Text style={styles.detailPrice}>{formatPrixDevise(d.prix, devise)}</Text>
-                  </View>
-                ))}
-
-                <View style={styles.actions}>
-                  {item.statut === 'EN_ATTENTE' && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: Colors.success }]}
-                      onPress={() => handleUpdateStatut(item.id, 'VALIDEE')}
-                    >
-                      <Text style={styles.actionText}>✓ Valider</Text>
-                    </TouchableOpacity>
-                  )}
-                  {item.statut === 'VALIDEE' && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: Colors.accent }]}
-                      onPress={() => handleUpdateStatut(item.id, 'EN_PREPARATION')}
-                    >
-                      <Text style={styles.actionText}>👨‍🍳 En préparation</Text>
-                    </TouchableOpacity>
-                  )}
-                  {item.statut === 'EN_PREPARATION' && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: Colors.primary }]}
-                      onPress={() => handleUpdateStatut(item.id, 'PRETE')}
-                    >
-                      <Text style={styles.actionText}>✅ Prête</Text>
-                    </TouchableOpacity>
-                  )}
-                  {item.statut === 'PRETE' && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, { backgroundColor: Colors.info }]}
-                      onPress={() => handleUpdateStatut(item.id, 'SERVIE')}
-                    >
-                      <Text style={styles.actionText}>🍽 Servie</Text>
-                    </TouchableOpacity>
-                  )}
+                <View style={styles.tableGroupRight}>
+                  <Text style={styles.tableGroupTotal}>{formatPrixDevise(group.total, devise)}</Text>
+                  <Text style={styles.expandIcon}>{expandedGroup === 'enc-' + group.sessionId + '-' + group.tableId ? '▲' : '▼'}</Text>
                 </View>
-              </View>
-            )}
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyText}>Aucune commande</Text>
-          </View>
-        }
-      />
+              </TouchableOpacity>
 
-      {isServeur && (
+              {expandedGroup === 'enc-' + group.sessionId + '-' + group.tableId && group.commandes.map((c) => (
+                <View key={c.id} style={styles.orderItem}>
+                  <View style={styles.orderItemHeader}>
+                    <Text style={styles.orderTime}>
+                      {new Date(c.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                    {c.clientRef && <Text style={styles.orderClient}>👤 {c.clientRef}</Text>}
+                    <View style={[styles.orderStatus, { backgroundColor: STATUT_COLORS[c.statut] + '18' }]}>
+                      <Text style={[styles.orderStatusText, { color: STATUT_COLORS[c.statut] }]}>{STATUT_LABELS[c.statut]}</Text>
+                    </View>
+                    <Text style={styles.orderTotal}>{formatPrixDevise(c.montantTotal, devise)}</Text>
+                  </View>
+                  {c.details?.map((d: any) => (
+                    <View key={d.id} style={styles.orderDetail}>
+                      <Text style={styles.orderQty}>x{d.quantite}</Text>
+                      <Text style={styles.orderName}>{d.menu?.nom}</Text>
+                      <Text style={styles.orderPrice}>{formatPrixDevise(d.prix, devise)}</Text>
+                    </View>
+                  ))}
+                  {/* Actions */}
+                  <View style={styles.orderActions}>
+                    {c.statut === 'EN_ATTENTE' && (
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.success }]} onPress={() => handleUpdateStatut(c.id, 'VALIDEE')}>
+                        <Text style={styles.actionText}>✓ Valider</Text>
+                      </TouchableOpacity>
+                    )}
+                    {c.statut === 'VALIDEE' && (
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent }]} onPress={() => handleUpdateStatut(c.id, 'EN_PREPARATION')}>
+                        <Text style={styles.actionText}>👨‍🍳 En prépa</Text>
+                      </TouchableOpacity>
+                    )}
+                    {c.statut === 'EN_PREPARATION' && (
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.primary }]} onPress={() => handleUpdateStatut(c.id, 'PRETE')}>
+                        <Text style={styles.actionText}>✅ Prête</Text>
+                      </TouchableOpacity>
+                    )}
+                    {c.statut === 'PRETE' && (
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info }]} onPress={() => handleUpdateStatut(c.id, 'SERVIE')}>
+                        <Text style={styles.actionText}>🍽 Servie</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyIcon}>🛒</Text>
+              <Text style={styles.emptyText}>Aucune commande en cours</Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* Onglet Payées */}
+      {tab === 'payees' && (
+        <FlatList
+          data={commandesPayees}
+          keyExtractor={(item) => 'paid-' + item.sessionId + '-' + item.tableId}
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
+          renderItem={({ item: group }) => (
+            <View style={styles.tableGroup}>
+              <TouchableOpacity
+                style={styles.tableGroupHeader}
+                onPress={() => setExpandedGroup(expandedGroup === 'paid-' + group.sessionId + '-' + group.tableId ? null : 'paid-' + group.sessionId + '-' + group.tableId)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.tableGroupLeft}>
+                  <Text style={styles.tableGroupNum}>Table {group.tableNum}</Text>
+                  <Text style={styles.tableGroupCount}>
+                    {new Date(group.dateArrivee).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • {group.commandes.length} cde(s) payée(s)
+                  </Text>
+                </View>
+                <View style={styles.tableGroupRight}>
+                  <Text style={[styles.tableGroupTotal, { color: Colors.success }]}>{formatPrixDevise(group.total, devise)}</Text>
+                  <Text style={styles.expandIcon}>{expandedGroup === 'paid-' + group.sessionId + '-' + group.tableId ? '▲' : '▼'}</Text>
+                </View>
+              </TouchableOpacity>
+
+              {expandedGroup === 'paid-' + group.sessionId + '-' + group.tableId && group.commandes.map((c) => (
+                <View key={c.id} style={styles.orderItem}>
+                  <View style={styles.orderItemHeader}>
+                    <Text style={styles.orderTime}>
+                      {new Date(c.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                    {c.clientRef && <Text style={styles.orderClient}>👤 {c.clientRef}</Text>}
+                    <Text style={styles.orderTotal}>{formatPrixDevise(c.montantTotal, devise)}</Text>
+                  </View>
+                  {c.details?.map((d: any) => (
+                    <View key={d.id} style={styles.orderDetail}>
+                      <Text style={styles.orderQty}>x{d.quantite}</Text>
+                      <Text style={styles.orderName}>{d.menu?.nom}</Text>
+                      <Text style={styles.orderPrice}>{formatPrixDevise(Number(d.prix) * d.quantite, devise)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          )}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyIcon}>💰</Text>
+              <Text style={styles.emptyText}>Aucune commande payée</Text>
+            </View>
+          }
+        />
+      )}
+
+      {(isManager || isServeur) && (
         <TouchableOpacity style={styles.fab} onPress={openCreateModal}>
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
       )}
+
+      {/* Filter Date Picker */}
+      <CalendarPicker
+        visible={showFilterDatePicker}
+        value={filterDate}
+        onSelect={(dateStr) => setFilterDate(dateStr)}
+        onClose={() => setShowFilterDatePicker(false)}
+      />
 
       {/* Create Order Modal */}
       <Modal visible={showCreateModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Nouvelle Commande</Text>
-
-            {/* Table selection */}
             <Text style={styles.fieldLabel}>Table</Text>
             <FlatList
               horizontal
@@ -260,14 +384,10 @@ export default function CommandesScreen() {
                   style={[styles.tableChip, selectedTableId === t.id && styles.tableChipActive]}
                   onPress={() => setSelectedTableId(t.id)}
                 >
-                  <Text style={selectedTableId === t.id ? styles.tableChipTextActive : styles.tableChipText}>
-                    {t.numero}
-                  </Text>
+                  <Text style={selectedTableId === t.id ? styles.tableChipTextActive : styles.tableChipText}>{t.numero}</Text>
                 </TouchableOpacity>
               )}
             />
-
-            {/* Menu items */}
             <Text style={styles.fieldLabel}>Plats & Boissons</Text>
             <View style={{ maxHeight: 180 }}>
               <FlatList
@@ -283,38 +403,25 @@ export default function CommandesScreen() {
                 ListEmptyComponent={<Text style={{ color: Colors.textLight, padding: 10 }}>Aucun plat disponible</Text>}
               />
             </View>
-
-            {/* Cart */}
             {cart.length > 0 && (
               <>
                 <Text style={styles.fieldLabel}>Panier</Text>
                 {cart.map((c) => (
                   <View key={c.menuId} style={styles.cartRow}>
-                    <TouchableOpacity onPress={() => updateQty(c.menuId, -1)}>
-                      <Text style={styles.cartQtyBtn}>−</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => updateQty(c.menuId, -1)}><Text style={styles.cartQtyBtn}>−</Text></TouchableOpacity>
                     <Text style={styles.cartQty}>x{c.quantite}</Text>
-                    <TouchableOpacity onPress={() => updateQty(c.menuId, 1)}>
-                      <Text style={styles.cartQtyBtn}>+</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => updateQty(c.menuId, 1)}><Text style={styles.cartQtyBtn}>+</Text></TouchableOpacity>
                     <Text style={styles.cartName}>{c.nom}</Text>
                     <Text style={styles.cartPrice}>{formatPrixDevise(c.prix * c.quantite, devise)}</Text>
-                    <TouchableOpacity onPress={() => removeFromCart(c.menuId)}>
-                      <Text style={styles.cartRemove}>🗑</Text>
-                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => removeFromCart(c.menuId)}><Text style={styles.cartRemove}>🗑</Text></TouchableOpacity>
                   </View>
                 ))}
                 <Text style={styles.cartTotal}>Total: {formatPrixDevise(totalCart, devise)}</Text>
               </>
             )}
-
             <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}>
-                <Text style={styles.cancelText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleCreateOrder}>
-                <Text style={styles.saveText}>Commander</Text>
-              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleCreateOrder}><Text style={styles.saveText}>Commander</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -326,78 +433,70 @@ export default function CommandesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  dateBar: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface,
+    paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 12, marginTop: 10,
+    borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
+  },
+  dateIcon: { fontSize: 16, marginRight: 10 },
+  dateText: { fontSize: 14, fontWeight: '600', color: Colors.text, textTransform: 'capitalize', flex: 1 },
+  tabRow: { flexDirection: 'row', margin: 12, gap: 8 },
+  tab: { flex: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  tabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tabText: { fontSize: 14, fontWeight: '600', color: Colors.textLight },
+  tabTextActive: { color: Colors.textWhite },
   list: { padding: 12, paddingBottom: 80 },
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    marginBottom: 10,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+  tableGroup: {
+    backgroundColor: Colors.surface, borderRadius: 16, marginBottom: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, overflow: 'hidden',
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-  },
-  tableLabel: { fontSize: 16, fontWeight: '700', color: Colors.text },
-  clientRef: { fontSize: 13, color: Colors.primary, fontWeight: '600', marginTop: 2 },
-  date: { fontSize: 13, color: Colors.textLight, marginTop: 2 },
-  cardRight: { alignItems: 'flex-end' },
-  statutBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  statutText: { fontSize: 11, fontWeight: '700' },
-  total: { fontSize: 16, fontWeight: '700', color: Colors.primary, marginTop: 6 },
-  details: { borderTopWidth: 1, borderTopColor: Colors.border, padding: 16 },
-  detailsTitle: { fontSize: 14, fontWeight: '600', color: Colors.textLight, marginBottom: 10 },
-  detailRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  detailQty: { width: 36, fontWeight: '700', color: Colors.primary, fontSize: 14 },
-  detailName: { flex: 1, fontSize: 14, color: Colors.text },
-  detailPrice: { fontSize: 14, fontWeight: '600', color: Colors.text },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14, gap: 8 },
-  actionBtn: {
-    borderRadius: 22, paddingHorizontal: 18, paddingVertical: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 4, elevation: 3,
-  },
-  actionText: { color: Colors.textWhite, fontWeight: '700', fontSize: 13 },
-  fab: {
-    position: 'absolute', bottom: 20, right: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 8, elevation: 8,
-  },
+  tableGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 },
+  tableGroupLeft: {},
+  tableGroupNum: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  tableGroupCount: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  tableGroupRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tableGroupTotal: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  expandIcon: { fontSize: 12, color: Colors.textLight },
+  orderItem: { borderTopWidth: 1, borderTopColor: Colors.border, padding: 14 },
+  orderItemHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  orderTime: { fontSize: 13, fontWeight: '600', color: Colors.textLight },
+  orderClient: { fontSize: 12, color: Colors.primary, fontWeight: '600' },
+  orderStatus: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
+  orderStatusText: { fontSize: 11, fontWeight: '700' },
+  orderTotal: { fontSize: 14, fontWeight: '700', color: Colors.primary, marginLeft: 'auto' },
+  orderDetail: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3, gap: 8 },
+  orderQty: { width: 28, fontWeight: '700', color: Colors.primary, fontSize: 13 },
+  orderName: { flex: 1, fontSize: 13, color: Colors.text },
+  orderPrice: { fontSize: 13, fontWeight: '600', color: Colors.textLight },
+  orderActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 6 },
+  actionBtn: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7 },
+  actionText: { color: Colors.textWhite, fontWeight: '700', fontSize: 11 },
+  paidCard: { backgroundColor: Colors.surface, borderRadius: 14, padding: 14, marginBottom: 8 },
+  paidHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  paidTable: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  paidDate: { fontSize: 12, color: Colors.textLight },
+  paidTotal: { fontSize: 15, fontWeight: '700', color: Colors.success },
+  paidDetail: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+  paidDetailName: { fontSize: 13, color: Colors.text },
+  paidDetailPrice: { fontSize: 13, color: Colors.textLight },
+  empty: { alignItems: 'center', padding: 50 },
+  emptyIcon: { fontSize: 50, marginBottom: 10 },
+  emptyText: { color: Colors.textLight, fontSize: 16 },
+  fab: { position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 8 },
   fabText: { color: Colors.textWhite, fontSize: 28, fontWeight: '300', marginTop: -2 },
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: '90%' },
   modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 16, textAlign: 'center' },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: Colors.secondary, marginBottom: 8, marginTop: 12 },
-  tableChip: {
-    borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginRight: 8,
-    backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border,
-  },
+  tableChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginRight: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border },
   tableChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   tableChipText: { fontSize: 13, color: Colors.textLight, fontWeight: '500' },
   tableChipTextActive: { color: Colors.textWhite, fontWeight: '700' },
-  menuItemRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: Colors.border, paddingHorizontal: 4,
-  },
+  menuItemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border, paddingHorizontal: 4 },
   menuItemName: { flex: 1, fontSize: 14, color: Colors.text },
   menuItemPrice: { fontSize: 14, fontWeight: '600', color: Colors.text, marginRight: 12 },
   menuItemAdd: { fontSize: 20, fontWeight: '700', color: Colors.primary, width: 28, textAlign: 'center' },
-  cartRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 6,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
+  cartRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: Colors.border },
   cartQtyBtn: { fontSize: 18, fontWeight: '700', color: Colors.primary, paddingHorizontal: 6 },
   cartQty: { fontSize: 14, fontWeight: '700', color: Colors.text, width: 30, textAlign: 'center' },
   cartName: { flex: 1, fontSize: 14, color: Colors.text, marginLeft: 6 },
@@ -409,7 +508,4 @@ const styles = StyleSheet.create({
   cancelText: { color: Colors.textLight, fontWeight: '600', fontSize: 15 },
   saveBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, backgroundColor: Colors.primary, alignItems: 'center' },
   saveText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
-  empty: { alignItems: 'center', padding: 50 },
-  emptyIcon: { fontSize: 50, marginBottom: 10 },
-  emptyText: { color: Colors.textLight, fontSize: 16 },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View, Text, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -35,9 +35,15 @@ const TAB_ICONS: Record<string, string> = {
   Notifications: '🔔',
 };
 
+const API_URL = 'http://192.168.1.7:3000';
+
 function MainTabs() {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<any>();
+  const user = useSelector((state: RootState) => state.auth.user);
+  const photoUri = user?.photo
+    ? (user.photo.startsWith('http') ? user.photo : API_URL + user.photo)
+    : null;
 
   return (
     <Tab.Navigator
@@ -47,9 +53,17 @@ function MainTabs() {
         headerLeft: () => (
           <TouchableOpacity
             onPress={() => navigation.navigate('Profile')}
-            style={{ marginLeft: 12 }}
+            style={styles.headerAvatar}
           >
-            <Text style={{ fontSize: 22 }}>👤</Text>
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.headerAvatarImg} />
+            ) : (
+              <View style={styles.headerAvatarPlaceholder}>
+                <Text style={styles.headerAvatarText}>
+                  {user?.nom?.charAt(0)?.toUpperCase() || '?'}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         ),
         headerRight: () => (
@@ -147,3 +161,15 @@ export default function AppNavigator() {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  headerAvatar: { marginLeft: 12 },
+  headerAvatarImg: { width: 36, height: 36, borderRadius: 18 },
+  headerAvatarPlaceholder: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.primary + '20',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: Colors.primary + '40',
+  },
+  headerAvatarText: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+});

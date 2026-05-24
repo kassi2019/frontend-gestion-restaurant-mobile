@@ -14,10 +14,11 @@ import {
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { Colors } from '../theme/colors';
-import { tablesApi, serveurTablesApi, usersApi } from '../services/api';
+import { tablesApi, serveurTablesApi, usersApi, commandesApi } from '../services/api';
 import { showToast } from '../services/toast';
 import ModalPicker from '../components/ModalPicker';
 import ActionSheet from '../components/ActionSheet';
+import useResponsive from '../hooks/useResponsive';
 
 const STATUT_COLORS: Record<string, string> = {
   LIBRE: Colors.success,
@@ -30,6 +31,7 @@ const ZONES = ['Terrasse', 'Intérieur', 'VIP'];
 export default function TablesScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const { columns, sp } = useResponsive();
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,8 +47,17 @@ export default function TablesScreen() {
 
   const loadTables = async () => {
     try {
-      const { data } = await tablesApi.getAll();
-      setTables(data);
+      if (isManager) {
+        const { data } = await tablesApi.getAll();
+        setTables(Array.isArray(data) ? data : []);
+      } else {
+        // Serveur : utilise serveur_tables (affectation basée sur le planning du jour)
+        const { data } = await serveurTablesApi.findByServeur();
+        const assignedTables = Array.isArray(data)
+          ? data.map((a: any) => a.table).filter(Boolean)
+          : [];
+        setTables(assignedTables);
+      }
     } catch (err) {
       showToast.error('Impossible de charger les tables');
     } finally {
@@ -169,12 +180,29 @@ export default function TablesScreen() {
     }
   };
 
+  const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [tableOrders, setTableOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
   const handleTablePress = (item: any) => {
     setSelectedTable(item);
     if (isManager) {
       setShowActionModal(true);
     } else {
-      setShowStatutModal(true);
+      loadTableOrders(item.id);
+    }
+  };
+
+  const loadTableOrders = async (tableId: number) => {
+    setLoadingOrders(true);
+    setShowOrdersModal(true);
+    try {
+      const { data } = await commandesApi.getByTable(tableId);
+      setTableOrders(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setTableOrders([]);
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
@@ -197,8 +225,8 @@ export default function TablesScreen() {
       <FlatList
         data={tables}
         keyExtractor={(item) => item.id.toString()}
-        numColumns={2}
-        contentContainerStyle={styles.list}
+        numColumns={columns}
+        contentContainerStyle={[styles.list, { paddingHorizontal: sp(8) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -352,6 +380,49 @@ export default function TablesScreen() {
         </View>
       </Modal>
 
+      {/* Table Orders Modal (Serveur) */}
+      <Modal visible={showOrdersModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>Commandes - Table {selectedTable?.numero}</Text>
+            {loadingOrders ? (
+              <ActivityIndicator size="large" color={Colors.primary} style={{ marginVertical: 30 }} />
+            ) : tableOrders.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: Colors.textLight, padding: 30 }}>Aucune commande pour cette table</Text>
+            ) : (
+              <FlatList
+                data={tableOrders}
+                keyExtractor={(o) => o.id.toString()}
+                renderItem={({ item: o }) => (
+                  <View style={styles.orderCard}>
+                    <View style={styles.orderHeader}>
+                      <Text style={styles.orderDate}>
+                        {new Date(o.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                      <View style={[styles.orderStatus, { backgroundColor: (STATUT_COLORS[o.statut] || Colors.textLight) + '18' }]}>
+                        <Text style={[styles.orderStatusText, { color: STATUT_COLORS[o.statut] || Colors.textLight }]}>
+                          {o.statut === 'EN_ATTENTE' ? 'En attente' : o.statut === 'VALIDEE' ? 'Validée' : o.statut === 'EN_PREPARATION' ? 'En préparation' : o.statut === 'PRETE' ? 'Prête' : o.statut === 'SERVIE' ? 'Servie' : o.statut === 'PAYEE' ? 'Payée' : o.statut}
+                        </Text>
+                      </View>
+                    </View>
+                    {o.details?.map((d: any) => (
+                      <View key={d.id} style={styles.orderDetail}>
+                        <Text style={styles.orderQty}>x{d.quantite}</Text>
+                        <Text style={styles.orderName}>{d.menu?.nom}</Text>
+                      </View>
+                    ))}
+                    {o.clientRef && <Text style={styles.orderClient}>👤 {o.clientRef}</Text>}
+                  </View>
+                )}
+              />
+            )}
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowOrdersModal(false)}>
+              <Text style={styles.cancelText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Daily Check button (Manager only) */}
       {isManager && (
         <TouchableOpacity style={styles.checkFab} onPress={handleRunDailyCheck}>
@@ -426,4 +497,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 6, elevation: 5,
   },
   checkFabText: { fontSize: 20 },
+  orderCard: { backgroundColor: Colors.inputBg, borderRadius: 12, padding: 12, marginBottom: 8 },
+  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  orderDate: { fontSize: 14, fontWeight: '600', color: Colors.text },
+  orderStatus: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  orderStatusText: { fontSize: 11, fontWeight: '700' },
+  orderDetail: { flexDirection: 'row', paddingVertical: 4, gap: 8 },
+  orderQty: { width: 30, fontWeight: '700', color: Colors.primary, fontSize: 13 },
+  orderName: { fontSize: 13, color: Colors.text },
+  orderClient: { fontSize: 12, color: Colors.primary, fontWeight: '600', marginTop: 4 },
 });

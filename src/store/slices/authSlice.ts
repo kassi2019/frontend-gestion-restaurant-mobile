@@ -69,6 +69,10 @@ const authSlice = createSlice({
       state.token = null;
       try { AsyncStorage.removeItem('token'); AsyncStorage.removeItem('user'); } catch (e) {}
     },
+    updateUser: (state, action) => {
+      state.user = { ...state.user, ...action.payload };
+      try { AsyncStorage.setItem('user', JSON.stringify(state.user)); } catch (e) {}
+    },
     clearError: (state) => {
       state.error = null;
     },
@@ -95,7 +99,7 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError } = authSlice.actions;
+export const { logout, updateUser, clearError } = authSlice.actions;
 
 export const selectDevise = (state: { auth: AuthState }) => state.auth.user?.devise || '€';
 

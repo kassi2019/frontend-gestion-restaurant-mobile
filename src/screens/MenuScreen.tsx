@@ -23,11 +23,13 @@ import { showToast } from '../services/toast';
 const API_URL = 'http://192.168.1.7:3000';
 import ModalPicker from '../components/ModalPicker';
 import ActionSheet from '../components/ActionSheet';
+import useResponsive from '../hooks/useResponsive';
 
 export default function MenuScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const devise = useSelector(selectDevise);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const { columns, sp } = useResponsive();
   const [categories, setCategories] = useState<any[]>([]);
   const [menus, setMenus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

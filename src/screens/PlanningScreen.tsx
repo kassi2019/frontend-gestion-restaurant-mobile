@@ -18,10 +18,12 @@ import { planningApi, usersApi } from '../services/api';
 import { showToast } from '../services/toast';
 import ActionSheet from '../components/ActionSheet';
 import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
+import useResponsive from '../hooks/useResponsive';
 
 export default function PlanningScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const { sp } = useResponsive();
   const [plannings, setPlannings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
