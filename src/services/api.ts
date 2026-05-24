@@ -41,6 +41,16 @@ export const authApi = {
     api.post('/auth/login', data),
   register: (data: any) => api.post('/auth/register', data),
   getProfile: () => api.get('/auth/profile'),
+  forgotPassword: (data: { telephone: string; newPassword: string }) =>
+    api.post('/auth/forgot-password', data),
+  changePassword: (data: { oldPassword: string; newPassword: string }) =>
+    api.patch('/auth/password', data),
+  updateProfile: (data: { nom?: string; photo?: string }) =>
+    api.patch('/auth/profile', data),
+  uploadPhoto: (formData: FormData) =>
+    api.post('/auth/photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
 export const menuApi = {
@@ -99,6 +109,7 @@ export const commandesApi = {
 };
 
 export const planningApi = {
+  getAll: () => api.get('/planning'),
   getMine: () => api.get('/planning/mine'),
   create: (data: any) => api.post('/planning', data),
   update: (id: number, data: any) => api.patch(`/planning/${id}`, data),
@@ -132,6 +143,7 @@ export const statistiquesApi = {
 export const usersApi = {
   getAll: () => api.get('/users'),
   findByRole: (role: string) => api.get(`/users/role/${role}`),
+  update: (id: number, data: any) => api.patch(`/users/${id}`, data),
   updateStatut: (id: number, statut: string) =>
     api.patch(`/users/${id}/statut?statut=${statut}`),
 };

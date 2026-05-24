@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Colors } from '../theme/colors';
 import { planningApi, usersApi } from '../services/api';
 import { showToast } from '../services/toast';
 import ActionSheet from '../components/ActionSheet';
+import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 export default function PlanningScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -27,16 +28,81 @@ export default function PlanningScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
+  const [showCreateDatePicker, setShowCreateDatePicker] = useState(false);
+  const [showEditDatePicker, setShowEditDatePicker] = useState(false);
+  const [createFilterRole, setCreateFilterRole] = useState('');
   const [selectedPlanning, setSelectedPlanning] = useState<any>(null);
   const [serveurs, setServeurs] = useState<any[]>([]);
   const [form, setForm] = useState({ jour: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
   const [editForm, setEditForm] = useState({ id: 0, jour: '', heureDebut: '', heureFin: '' });
+  const [filterDate, setFilterDate] = useState(toDateStr(new Date()));
+  const [filterUserId, setFilterUserId] = useState(0);
+  const [filterRole, setFilterRole] = useState('');
+  const [showFilterDatePicker, setShowFilterDatePicker] = useState(false);
+  const [allServeurs, setAllServeurs] = useState<any[]>([]);
 
-  useEffect(() => { loadPlannings(); }, []);
+  const ROLE_LABELS: Record<string, string> = {
+    ADMIN: 'Admin', MANAGER: 'Manager', SERVEUR: 'Serveur',
+    CUISINIER: 'Cuisinier', CAISSIER: 'Caissier',
+  };
+  const ROLE_COLORS: Record<string, string> = {
+    ADMIN: '#E74C3C', MANAGER: '#3498DB', SERVEUR: '#27AE60',
+    CUISINIER: '#F39C12', CAISSIER: '#9B59B6',
+  };
+
+  const rolesDisponibles = useMemo(() => {
+    const roles = new Set<string>();
+    allServeurs.forEach((u) => { if (u.role) roles.add(u.role); });
+    return Array.from(roles);
+  }, [allServeurs]);
+
+  const agentsFiltres = useMemo(() => {
+    if (!filterRole) return allServeurs;
+    return allServeurs.filter((u) => u.role === filterRole);
+  }, [allServeurs, filterRole]);
+
+  const agentsCreateFiltres = useMemo(() => {
+    if (!createFilterRole) return serveurs;
+    return serveurs.filter((u) => u.role === createFilterRole);
+  }, [serveurs, createFilterRole]);
+
+  const rolesCreateDisponibles = useMemo(() => {
+    const roles = new Set<string>();
+    serveurs.forEach((u) => { if (u.role) roles.add(u.role); });
+    return Array.from(roles);
+  }, [serveurs]);
+
+  const normalizeDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    return dateStr.split('T')[0];
+  };
+
+  const filteredPlannings = useMemo(() => {
+    let list = plannings;
+    if (filterDate) {
+      list = list.filter((p) => normalizeDate(p.jour) === filterDate);
+    }
+    if (isManager && filterUserId > 0) {
+      list = list.filter((p) => p.utilisateur?.id === filterUserId || p.utilisateurId === filterUserId);
+    }
+    return list;
+  }, [plannings, filterDate, filterUserId, isManager]);
+
+  useEffect(() => { loadPlannings(); loadServeursForFilter(); }, []);
+
+  const loadServeursForFilter = async () => {
+    if (!isManager) return;
+    try {
+      const { data } = await usersApi.getAll();
+      setAllServeurs(Array.isArray(data) ? data : []);
+    } catch (e) { setAllServeurs([]); }
+  };
 
   const loadPlannings = async () => {
     try {
-      const { data } = await planningApi.getMine();
+      const { data } = isManager
+        ? await planningApi.getAll()
+        : await planningApi.getMine();
       setPlannings(Array.isArray(data) ? data : []);
     } catch (err) {
       setPlannings([]);
@@ -54,18 +120,19 @@ export default function PlanningScreen() {
   const openCreateModal = async () => {
     if (isManager) {
       try {
-        const { data } = await usersApi.findByRole('SERVEUR');
+        const { data } = await usersApi.getAll();
         setServeurs(Array.isArray(data) ? data : []);
       } catch (e) { setServeurs([]); }
     }
-    setForm({ jour: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: isManager ? 0 : user!.id });
+    setCreateFilterRole('');
+    setForm({ jour: filterDate, heureDebut: '08:00', heureFin: '17:00', utilisateurId: isManager ? 0 : user!.id });
     setShowCreateModal(true);
   };
 
   const handleCreate = async () => {
     if (!form.jour) return Alert.alert('Erreur', 'La date est requise (YYYY-MM-DD)');
     const uid = isManager ? form.utilisateurId : user!.id;
-    if (!uid) return Alert.alert('Erreur', 'Sélectionnez un serveur');
+    if (!uid) return Alert.alert('Erreur', 'Sélectionnez un agent');
     try {
       await planningApi.create({
         utilisateurId: uid,
@@ -123,12 +190,6 @@ export default function PlanningScreen() {
     return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   };
 
-  const toDateStr = (dateStr: string) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toISOString().split('T')[0];
-  };
-
   const toTimeStr = (dateStr: string) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -146,10 +207,72 @@ export default function PlanningScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={plannings}
+        data={filteredPlannings}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
+        ListHeaderComponent={
+          <View style={styles.filterBar}>
+            {/* Filtre date */}
+            <TouchableOpacity style={styles.filterDateBtn} onPress={() => setShowFilterDatePicker(true)}>
+              <Text style={styles.filterDateIcon}>📅</Text>
+              <Text style={styles.filterDateText}>
+                {filterDate ? formatDisplay(filterDate) : 'Toutes les dates'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Filtre rôle + agent (admin/manager) */}
+            {isManager && allServeurs.length > 0 && (
+              <View style={styles.filterSection}>
+                {/* Rôles */}
+                <Text style={styles.filterSectionTitle}>Rôles</Text>
+                <View style={styles.filterChipRow}>
+                  <TouchableOpacity
+                    style={[styles.roleChip, filterRole === '' && styles.roleChipActive]}
+                    onPress={() => { setFilterRole(''); setFilterUserId(0); }}
+                  >
+                    <Text style={filterRole === '' ? styles.roleChipTextActive : styles.roleChipText}>Tous</Text>
+                  </TouchableOpacity>
+                  {rolesDisponibles.map((role) => (
+                    <TouchableOpacity
+                      key={role}
+                      style={[styles.roleChip, filterRole === role && { backgroundColor: ROLE_COLORS[role] || Colors.primary, borderColor: ROLE_COLORS[role] || Colors.primary }]}
+                      onPress={() => { setFilterRole(filterRole === role ? '' : role); setFilterUserId(0); }}
+                    >
+                      <Text style={filterRole === role ? styles.roleChipTextActive : styles.roleChipText}>
+                        {ROLE_LABELS[role] || role}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Agents du rôle sélectionné */}
+                {filterRole !== '' && agentsFiltres.length > 0 && (
+                  <>
+                    <Text style={styles.filterSectionTitle}>Agents</Text>
+                    <View style={styles.filterChipRow}>
+                      <TouchableOpacity
+                        style={[styles.agentChip, filterUserId === 0 && styles.agentChipActive]}
+                        onPress={() => setFilterUserId(0)}
+                      >
+                        <Text style={filterUserId === 0 ? styles.agentChipTextActive : styles.agentChipText}>Tous</Text>
+                      </TouchableOpacity>
+                      {agentsFiltres.map((a) => (
+                        <TouchableOpacity
+                          key={a.id}
+                          style={[styles.agentChip, filterUserId === a.id && styles.agentChipActive]}
+                          onPress={() => setFilterUserId(filterUserId === a.id ? 0 : a.id)}
+                        >
+                          <Text style={filterUserId === a.id ? styles.agentChipTextActive : styles.agentChipText}>{a.nom}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
@@ -175,6 +298,9 @@ export default function PlanningScreen() {
                 {item.statut === 'ACTIF' ? 'Actif' : item.statut === 'ABSENT' ? 'Absent' : 'Congé'}
               </Text>
             </View>
+            {isManager && item.utilisateur && (
+              <Text style={styles.serveurName}>{item.utilisateur.nom}</Text>
+            )}
           </TouchableOpacity>
         )}
         ListEmptyComponent={
@@ -185,9 +311,11 @@ export default function PlanningScreen() {
         }
       />
 
-      <TouchableOpacity style={styles.fab} onPress={openCreateModal}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+      {isManager && (
+        <TouchableOpacity style={styles.fab} onPress={openCreateModal}>
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Action Sheet */}
       <ActionSheet
@@ -218,8 +346,13 @@ export default function PlanningScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Nouveau Planning</Text>
-            <Text style={styles.fieldLabel}>Date (YYYY-MM-DD)</Text>
-            <TextInput style={styles.field} placeholder="Ex: 2026-05-25" value={form.jour} onChangeText={(t) => setForm({ ...form, jour: t })} />
+            <Text style={styles.fieldLabel}>Date</Text>
+            <TouchableOpacity style={styles.dateField} onPress={() => setShowCreateDatePicker(true)}>
+              <Text style={form.jour ? styles.dateFieldText : styles.dateFieldPlaceholder}>
+                {form.jour ? formatDisplay(form.jour) : 'Appuyez pour choisir une date'}
+              </Text>
+              <Text style={styles.dateFieldIcon}>📅</Text>
+            </TouchableOpacity>
             <View style={styles.row}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.fieldLabel}>Heure début</Text>
@@ -232,9 +365,29 @@ export default function PlanningScreen() {
             </View>
             {isManager && serveurs.length > 0 && (
               <>
-                <Text style={styles.fieldLabel}>Serveur</Text>
+                <Text style={styles.fieldLabel}>Rôle</Text>
                 <View style={styles.chipRow}>
-                  {serveurs.map((s) => (
+                  <TouchableOpacity
+                    style={[styles.modalRoleChip, createFilterRole === '' && styles.modalRoleChipActive]}
+                    onPress={() => { setCreateFilterRole(''); setForm({ ...form, utilisateurId: 0 }); }}
+                  >
+                    <Text style={createFilterRole === '' ? styles.modalRoleChipTextActive : styles.modalRoleChipText}>Tous</Text>
+                  </TouchableOpacity>
+                  {rolesCreateDisponibles.map((role) => (
+                    <TouchableOpacity
+                      key={role}
+                      style={[styles.modalRoleChip, createFilterRole === role && { backgroundColor: ROLE_COLORS[role] || Colors.primary, borderColor: ROLE_COLORS[role] || Colors.primary }]}
+                      onPress={() => { setCreateFilterRole(createFilterRole === role ? '' : role); setForm({ ...form, utilisateurId: 0 }); }}
+                    >
+                      <Text style={createFilterRole === role ? styles.modalRoleChipTextActive : styles.modalRoleChipText}>
+                        {ROLE_LABELS[role] || role}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.fieldLabel}>Agent</Text>
+                <View style={styles.chipRow}>
+                  {agentsCreateFiltres.map((s) => (
                     <TouchableOpacity key={s.id} style={[styles.optChip, form.utilisateurId === s.id && styles.optChipActive]} onPress={() => setForm({ ...form, utilisateurId: s.id })}>
                       <Text style={form.utilisateurId === s.id ? styles.optChipTextActive : styles.optChipText}>{s.nom}</Text>
                     </TouchableOpacity>
@@ -250,13 +403,26 @@ export default function PlanningScreen() {
         </View>
       </Modal>
 
+      {/* Create Date Picker */}
+      <CalendarPicker
+        visible={showCreateDatePicker}
+        value={form.jour}
+        onSelect={(dateStr) => setForm({ ...form, jour: dateStr })}
+        onClose={() => setShowCreateDatePicker(false)}
+      />
+
       {/* Edit Modal */}
       <Modal visible={showEditModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Modifier le Planning</Text>
-            <Text style={styles.fieldLabel}>Date (YYYY-MM-DD)</Text>
-            <TextInput style={styles.field} placeholder="Ex: 2026-05-25" value={editForm.jour} onChangeText={(t) => setEditForm({ ...editForm, jour: t })} />
+            <Text style={styles.fieldLabel}>Date</Text>
+            <TouchableOpacity style={styles.dateField} onPress={() => setShowEditDatePicker(true)}>
+              <Text style={editForm.jour ? styles.dateFieldText : styles.dateFieldPlaceholder}>
+                {editForm.jour ? formatDisplay(editForm.jour) : 'Appuyez pour choisir une date'}
+              </Text>
+              <Text style={styles.dateFieldIcon}>📅</Text>
+            </TouchableOpacity>
             <View style={styles.row}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.fieldLabel}>Heure début</Text>
@@ -274,6 +440,22 @@ export default function PlanningScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Edit Date Picker */}
+      <CalendarPicker
+        visible={showEditDatePicker}
+        value={editForm.jour}
+        onSelect={(dateStr) => setEditForm({ ...editForm, jour: dateStr })}
+        onClose={() => setShowEditDatePicker(false)}
+      />
+
+      {/* Filter Date Picker */}
+      <CalendarPicker
+        visible={showFilterDatePicker}
+        value={filterDate}
+        onSelect={(dateStr) => setFilterDate(dateStr)}
+        onClose={() => setShowFilterDatePicker(false)}
+      />
     </View>
   );
 }
@@ -296,6 +478,7 @@ const styles = StyleSheet.create({
   dividerLine: { width: 20, height: 2, backgroundColor: Colors.border },
   statutBadge: { borderRadius: 12, paddingVertical: 6, alignItems: 'center' },
   statutText: { fontWeight: '700', fontSize: 13 },
+  serveurName: { fontSize: 13, fontWeight: '600', color: Colors.secondary, textAlign: 'center', marginTop: 8 },
   fab: {
     position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28,
     backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center',
@@ -307,6 +490,10 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 20, textAlign: 'center' },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: Colors.secondary, marginBottom: 6, marginTop: 12 },
   field: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 15, color: Colors.text, borderWidth: 1, borderColor: Colors.border },
+  dateField: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dateFieldText: { fontSize: 15, color: Colors.text, textTransform: 'capitalize', flex: 1 },
+  dateFieldPlaceholder: { fontSize: 15, color: Colors.textLight, flex: 1 },
+  dateFieldIcon: { fontSize: 18 },
   row: { flexDirection: 'row' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   optChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, marginTop: 4, marginRight: 6, alignSelf: 'flex-start' },
@@ -318,6 +505,41 @@ const styles = StyleSheet.create({
   cancelText: { color: Colors.textLight, fontWeight: '600', fontSize: 15 },
   saveBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, backgroundColor: Colors.primary, alignItems: 'center' },
   saveText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
+  filterBar: { marginBottom: 4 },
+  filterDateBtn: {
+    backgroundColor: Colors.surface, borderRadius: 14,
+    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 2,
+  },
+  filterDateIcon: { fontSize: 16, marginRight: 10 },
+  filterDateText: { fontSize: 15, fontWeight: '600', color: Colors.text, textTransform: 'capitalize', flex: 1 },
+  filterSection: { marginTop: 10 },
+  filterSectionTitle: { fontSize: 12, fontWeight: '600', color: Colors.textLight, marginBottom: 6 },
+  filterChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
+  roleChip: {
+    borderRadius: 18, paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+  },
+  roleChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  roleChipText: { fontSize: 13, color: Colors.textLight },
+  roleChipTextActive: { fontSize: 13, color: Colors.textWhite, fontWeight: '600' },
+  agentChip: {
+    borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1,
+  },
+  agentChipActive: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
+  agentChipText: { fontSize: 12, color: Colors.textLight },
+  agentChipTextActive: { fontSize: 12, color: Colors.textWhite, fontWeight: '600' },
+  modalRoleChip: {
+    borderRadius: 18, paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border,
+    marginTop: 4, marginRight: 6, alignSelf: 'flex-start',
+  },
+  modalRoleChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  modalRoleChipText: { fontSize: 12, color: Colors.textLight },
+  modalRoleChipTextActive: { fontSize: 12, color: Colors.textWhite, fontWeight: '600' },
   empty: { alignItems: 'center', padding: 50 },
   emptyIcon: { fontSize: 50, marginBottom: 10 },
   emptyText: { color: Colors.textLight, fontSize: 16 },

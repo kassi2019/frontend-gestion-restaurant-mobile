@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator, ScrollView, RefreshControl,
 } from 'react-native';
+import { useSelector } from 'react-redux';
+import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import { statistiquesApi } from '../services/api';
 import { showToast } from '../services/toast';
 import StatCard from '../components/StatCard';
 
 export default function StatsScreen() {
+  const devise = useSelector(selectDevise);
   const [dashboard, setDashboard] = useState<any>(null);
   const [platsPop, setPlatsPop] = useState<any[]>([]);
   const [serveurs, setServeurs] = useState<any[]>([]);
@@ -44,7 +47,7 @@ export default function StatsScreen() {
     <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}>
       {/* Stats header */}
       <View style={styles.statsRow}>
-        <StatCard title="CA Jour" value={`${(dashboard?.chiffreAffairesJour || 0).toFixed(0)} €`} icon="💰" color={Colors.success} />
+        <StatCard title="CA Jour" value={formatPrixDevise(dashboard?.chiffreAffairesJour || 0, devise, 0)} icon="💰" color={Colors.success} />
         <StatCard title="Commandes" value={dashboard?.commandesJour || 0} icon="📋" color={Colors.primary} />
       </View>
       <View style={styles.statsRow}>
@@ -59,7 +62,7 @@ export default function StatsScreen() {
           <Text style={styles.rankNum}>#{i + 1}</Text>
           <Text style={styles.rankName}>{p.nom}</Text>
           <Text style={styles.rankQty}>x{p.quantite}</Text>
-          <Text style={styles.rankMontant}>{p.montant.toFixed(0)} €</Text>
+          <Text style={styles.rankMontant}>{formatPrixDevise(p.montant, devise, 0)}</Text>
         </View>
       ))}
 
@@ -70,7 +73,7 @@ export default function StatsScreen() {
           <Text style={styles.rankNum}>#{i + 1}</Text>
           <Text style={styles.rankName}>{s.nom}</Text>
           <Text style={styles.rankQty}>{s.commandes} cmd</Text>
-          <Text style={styles.rankMontant}>{s.chiffreAffaires.toFixed(0)} €</Text>
+          <Text style={styles.rankMontant}>{formatPrixDevise(s.chiffreAffaires, devise, 0)}</Text>
         </View>
       ))}
 

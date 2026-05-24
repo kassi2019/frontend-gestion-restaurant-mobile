@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View, Text, TouchableOpacity } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector, useDispatch } from 'react-redux';
@@ -19,6 +19,7 @@ import UsersScreen from '../screens/UsersScreen';
 import CashierScreen from '../screens/CashierScreen';
 import StatsScreen from '../screens/StatsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
 const Stack = createStackNavigator();
@@ -36,12 +37,21 @@ const TAB_ICONS: Record<string, string> = {
 
 function MainTabs() {
   const dispatch = useDispatch<AppDispatch>();
+  const navigation = useNavigation<any>();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerStyle: { backgroundColor: Colors.surface },
         headerTitleStyle: { color: Colors.text, fontWeight: '700' },
+        headerLeft: () => (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            style={{ marginLeft: 12 }}
+          >
+            <Text style={{ fontSize: 22 }}>👤</Text>
+          </TouchableOpacity>
+        ),
         headerRight: () => (
           <TouchableOpacity
             onPress={() => dispatch(logout())}
@@ -129,6 +139,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="Cashier" component={CashierScreen} options={{ headerShown: true, headerTitle: 'Caisse', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Stats" component={StatsScreen} options={{ headerShown: true, headerTitle: 'Statistiques', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, headerTitle: 'Mon Profil', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
           </>
         )}
       </Stack.Navigator>

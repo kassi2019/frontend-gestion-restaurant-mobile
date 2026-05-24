@@ -9,6 +9,8 @@ interface User {
   role: string;
   photo?: string;
   restaurantId: number;
+  devise?: string;
+  restaurantNom?: string;
 }
 
 interface AuthState {
@@ -94,4 +96,12 @@ const authSlice = createSlice({
 });
 
 export const { logout, clearError } = authSlice.actions;
+
+export const selectDevise = (state: { auth: AuthState }) => state.auth.user?.devise || '€';
+
+export function formatPrixDevise(montant: number | string, devise?: string | null, decimals = 2) {
+  const d = devise || '€';
+  return `${Number(montant).toFixed(decimals)} ${d}`;
+}
+
 export default authSlice.reducer;

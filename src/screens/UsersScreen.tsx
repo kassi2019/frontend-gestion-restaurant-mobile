@@ -7,9 +7,14 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 import { Colors } from '../theme/colors';
-import { usersApi } from '../services/api';
+import { usersApi, authApi } from '../services/api';
 import { showToast } from '../services/toast';
 import ActionSheet from '../components/ActionSheet';
 import ModalPicker from '../components/ModalPicker';
@@ -34,8 +39,11 @@ const STATUT_COLORS: Record<string, string> = {
 
 const ROLES = ['Tous', 'ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'];
 const STATUTS = ['ACTIF', 'INACTIF', 'CONGE', 'SUSPENDU'];
+const ROLE_OPTIONS = ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'];
 
 export default function UsersScreen() {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,6 +51,10 @@ export default function UsersScreen() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showActionModal, setShowActionModal] = useState(false);
   const [showStatutModal, setShowStatutModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' });
+  const [editForm, setEditForm] = useState({ id: 0, nom: '', telephone: '', role: '', mot_de_passe: '' });
 
   const loadUsers = async () => {
     try {
@@ -63,6 +75,41 @@ export default function UsersScreen() {
     setRefreshing(true);
     await loadUsers();
     setRefreshing(false);
+  };
+
+  const handleCreate = async () => {
+    if (!createForm.nom || !createForm.telephone || !createForm.mot_de_passe) {
+      return Alert.alert('Erreur', 'Remplissez tous les champs');
+    }
+    try {
+      await authApi.register({
+        nom: createForm.nom,
+        telephone: createForm.telephone,
+        mot_de_passe: createForm.mot_de_passe,
+        role: createForm.role,
+        restaurantId: user!.restaurantId,
+      });
+      setShowCreateModal(false);
+      setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' });
+      showToast.success(`Utilisateur "${createForm.nom}" créé`);
+      loadUsers();
+    } catch (err: any) {
+      showToast.error(err.response?.data?.message || 'Impossible de créer l\'utilisateur');
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editForm.nom) return Alert.alert('Erreur', 'Le nom est requis');
+    try {
+      const payload: any = { nom: editForm.nom, telephone: editForm.telephone, role: editForm.role };
+      if (editForm.mot_de_passe) payload.mot_de_passe = editForm.mot_de_passe;
+      await usersApi.update(editForm.id, payload);
+      setShowEditModal(false);
+      showToast.success(`Utilisateur "${editForm.nom}" modifié`);
+      loadUsers();
+    } catch (err: any) {
+      showToast.error(err.response?.data?.message || 'Impossible de modifier l\'utilisateur');
+    }
   };
 
   const handleChangeStatut = async (statut: string) => {
@@ -113,8 +160,8 @@ export default function UsersScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.card}
-            onPress={() => { setSelectedUser(item); setShowActionModal(true); }}
-            activeOpacity={0.7}
+            onPress={() => { if (isManager) { setSelectedUser(item); setShowActionModal(true); } }}
+            activeOpacity={isManager ? 0.7 : 1}
           >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{item.nom.charAt(0).toUpperCase()}</Text>
@@ -141,12 +188,26 @@ export default function UsersScreen() {
         }
       />
 
+      {isManager && (
+        <TouchableOpacity style={styles.fab} onPress={() => { setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' }); setShowCreateModal(true); }}>
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Action Sheet */}
       <ActionSheet
         visible={showActionModal}
         title={selectedUser?.nom}
         subtitle={`${ROLE_LABELS[selectedUser?.role] || ''} • ${selectedUser?.telephone || ''}`}
         actions={[
+          {
+            icon: '✏️', label: 'Modifier',
+            onPress: () => {
+              setShowActionModal(false);
+              setEditForm({ id: selectedUser.id, nom: selectedUser.nom, telephone: selectedUser.telephone, role: selectedUser.role, mot_de_passe: '' });
+              setShowEditModal(true);
+            },
+          },
           { icon: '🔄', label: 'Changer statut', onPress: () => { setShowActionModal(false); setShowStatutModal(true); } },
         ]}
         onClose={() => setShowActionModal(false)}
@@ -161,6 +222,60 @@ export default function UsersScreen() {
         onSelect={handleChangeStatut}
         onClose={() => setShowStatutModal(false)}
       />
+
+      {/* Create User Modal */}
+      <Modal visible={showCreateModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Nouvel Utilisateur</Text>
+            <Text style={styles.fieldLabel}>Nom</Text>
+            <TextInput style={styles.field} placeholder="Ex: Jean Dupont" value={createForm.nom} onChangeText={(t) => setCreateForm({ ...createForm, nom: t })} />
+            <Text style={styles.fieldLabel}>Téléphone</Text>
+            <TextInput style={styles.field} placeholder="Ex: 0101010101" keyboardType="phone-pad" value={createForm.telephone} onChangeText={(t) => setCreateForm({ ...createForm, telephone: t })} />
+            <Text style={styles.fieldLabel}>Mot de passe</Text>
+            <TextInput style={styles.field} placeholder="Mot de passe" secureTextEntry value={createForm.mot_de_passe} onChangeText={(t) => setCreateForm({ ...createForm, mot_de_passe: t })} />
+            <Text style={styles.fieldLabel}>Rôle</Text>
+            <View style={styles.chipRow}>
+              {ROLE_OPTIONS.map((role) => (
+                <TouchableOpacity key={role} style={[styles.optChip, createForm.role === role && styles.optChipActive]} onPress={() => setCreateForm({ ...createForm, role })}>
+                  <Text style={createForm.role === role ? styles.optChipTextActive : styles.optChipText}>{ROLE_LABELS[role]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit User Modal */}
+      <Modal visible={showEditModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Modifier l'Utilisateur</Text>
+            <Text style={styles.fieldLabel}>Nom</Text>
+            <TextInput style={styles.field} placeholder="Nom" value={editForm.nom} onChangeText={(t) => setEditForm({ ...editForm, nom: t })} />
+            <Text style={styles.fieldLabel}>Téléphone</Text>
+            <TextInput style={styles.field} placeholder="Téléphone" keyboardType="phone-pad" value={editForm.telephone} onChangeText={(t) => setEditForm({ ...editForm, telephone: t })} />
+            <Text style={styles.fieldLabel}>Rôle</Text>
+            <View style={styles.chipRow}>
+              {ROLE_OPTIONS.map((role) => (
+                <TouchableOpacity key={role} style={[styles.optChip, editForm.role === role && styles.optChipActive]} onPress={() => setEditForm({ ...editForm, role })}>
+                  <Text style={editForm.role === role ? styles.optChipTextActive : styles.optChipText}>{ROLE_LABELS[role]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.fieldLabel}>Nouveau mot de passe (optionnel)</Text>
+            <TextInput style={styles.field} placeholder="Laisser vide pour ne pas changer" secureTextEntry value={editForm.mot_de_passe} onChangeText={(t) => setEditForm({ ...editForm, mot_de_passe: t })} />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleEdit}><Text style={styles.saveText}>Enregistrer</Text></TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -168,10 +283,10 @@ export default function UsersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  filterList: { paddingHorizontal: 12, paddingVertical: 12 },
-  filterChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginHorizontal: 4, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  filterList: { paddingHorizontal: 12, paddingVertical: 8 },
+  filterChip: { borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, marginHorizontal: 3, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
   filterChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  filterText: { fontSize: 13, color: Colors.textLight, fontWeight: '500' },
+  filterText: { fontSize: 11, color: Colors.textLight, fontWeight: '500' },
   filterTextActive: { color: Colors.textWhite, fontWeight: '700' },
   list: { padding: 12 },
   card: {
@@ -192,4 +307,25 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', padding: 50 },
   emptyIcon: { fontSize: 50, marginBottom: 10 },
   emptyText: { color: Colors.textLight, fontSize: 16 },
+  fab: {
+    position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28,
+    backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center',
+    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 8,
+  },
+  fabText: { color: Colors.textWhite, fontSize: 28, fontWeight: '300', marginTop: -2 },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: '80%' },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 20, textAlign: 'center' },
+  fieldLabel: { fontSize: 14, fontWeight: '600', color: Colors.secondary, marginBottom: 6, marginTop: 12 },
+  field: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 15, color: Colors.text, borderWidth: 1, borderColor: Colors.border },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  optChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, marginTop: 4, marginRight: 6, alignSelf: 'flex-start' },
+  optChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  optChipText: { fontSize: 13, color: Colors.textLight },
+  optChipTextActive: { fontSize: 13, color: Colors.textWhite, fontWeight: '600' },
+  modalBtns: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, gap: 12 },
+  cancelBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, borderWidth: 1.5, borderColor: Colors.border, alignItems: 'center' },
+  cancelText: { color: Colors.textLight, fontWeight: '600', fontSize: 15 },
+  saveBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, backgroundColor: Colors.primary, alignItems: 'center' },
+  saveText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
 });

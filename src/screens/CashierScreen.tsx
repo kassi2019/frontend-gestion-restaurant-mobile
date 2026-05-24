@@ -3,6 +3,9 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import { paiementApi } from '../services/api';
 import { showToast } from '../services/toast';
@@ -13,6 +16,7 @@ const MODE_LABELS: Record<string, string> = {
 };
 
 export default function CashierScreen() {
+  const devise = useSelector(selectDevise);
   const [commandes, setCommandes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,7 +59,7 @@ export default function CashierScreen() {
       { text: 'Clôturer', onPress: async () => {
         try {
           const { data } = await paiementApi.cloturerCaisse();
-          showToast.success(`Caisse clôturée: ${data.totalGeneral.toFixed(2)} €`);
+          showToast.success(`Caisse clôturée: ${formatPrixDevise(data.totalGeneral, devise)}`);
           loadData();
         } catch (e) { showToast.error('Échec clôture'); }
       }},
@@ -72,11 +76,11 @@ export default function CashierScreen() {
       {caisse && (
         <View style={styles.caisseCard}>
           <Text style={styles.caisseTitle}>Caisse du jour</Text>
-          <Text style={styles.caisseTotal}>{caisse.totalGeneral.toFixed(2)} €</Text>
+          <Text style={styles.caisseTotal}>{formatPrixDevise(caisse.totalGeneral, devise)}</Text>
           <View style={styles.caisseRow}>
-            <Text style={styles.caisseDetail}>Espèces: {caisse.details.totalEspeces.toFixed(2)} €</Text>
-            <Text style={styles.caisseDetail}>Mobile: {caisse.details.totalMobileMoney.toFixed(2)} €</Text>
-            <Text style={styles.caisseDetail}>Carte: {caisse.details.totalCarte.toFixed(2)} €</Text>
+            <Text style={styles.caisseDetail}>Espèces: {formatPrixDevise(caisse.details.totalEspeces, devise)}</Text>
+            <Text style={styles.caisseDetail}>Mobile: {formatPrixDevise(caisse.details.totalMobileMoney, devise)}</Text>
+            <Text style={styles.caisseDetail}>Carte: {formatPrixDevise(caisse.details.totalCarte, devise)}</Text>
           </View>
           <Text style={styles.caisseCount}>{caisse.nombreFactures} facture(s)</Text>
         </View>
@@ -99,7 +103,7 @@ export default function CashierScreen() {
               <Text style={styles.detailCount}>{item.details?.length || 0} article(s)</Text>
             </View>
             <View style={styles.cardRight}>
-              <Text style={styles.total}>{Number(item.montantTotal).toFixed(2)} €</Text>
+              <Text style={styles.total}>{formatPrixDevise(item.montantTotal, devise)}</Text>
               <Text style={styles.statutLabel}>{item.statut === 'SERVIE' ? 'Servie' : 'Prête'}</Text>
             </View>
           </TouchableOpacity>
@@ -116,7 +120,7 @@ export default function CashierScreen() {
       <ActionSheet
         visible={showActionModal}
         title={`Paiement Table ${selectedCommande?.table?.numero}`}
-        subtitle={`${Number(selectedCommande?.montantTotal || 0).toFixed(2)} €`}
+        subtitle={formatPrixDevise(selectedCommande?.montantTotal || 0, devise)}
         actions={[
           { icon: '💵', label: 'Espèces', onPress: () => handlePayer('ESPECES') },
           { icon: '📱', label: 'Mobile Money', onPress: () => handlePayer('MOBILE_MONEY') },

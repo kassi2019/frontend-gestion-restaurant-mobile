@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import { commandesApi, tablesApi, menuApi } from '../services/api';
 import { showToast } from '../services/toast';
@@ -38,6 +39,7 @@ const STATUT_LABELS: Record<string, string> = {
 
 export default function CommandesScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
+  const devise = useSelector(selectDevise);
   const isServeur = user?.role === 'SERVEUR' || user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const [commandes, setCommandes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -172,7 +174,7 @@ export default function CommandesScreen() {
                     {STATUT_LABELS[item.statut]}
                   </Text>
                 </View>
-                <Text style={styles.total}>{Number(item.montantTotal).toFixed(2)} €</Text>
+                <Text style={styles.total}>{formatPrixDevise(item.montantTotal, devise)}</Text>
               </View>
             </TouchableOpacity>
 
@@ -183,7 +185,7 @@ export default function CommandesScreen() {
                   <View key={d.id} style={styles.detailRow}>
                     <Text style={styles.detailQty}>x{d.quantite}</Text>
                     <Text style={styles.detailName}>{d.menu?.nom}</Text>
-                    <Text style={styles.detailPrice}>{Number(d.prix).toFixed(2)} €</Text>
+                    <Text style={styles.detailPrice}>{formatPrixDevise(d.prix, devise)}</Text>
                   </View>
                 ))}
 
@@ -274,7 +276,7 @@ export default function CommandesScreen() {
                 renderItem={({ item: m }) => (
                   <TouchableOpacity style={styles.menuItemRow} onPress={() => addToCart(m)}>
                     <Text style={styles.menuItemName}>{m.nom}</Text>
-                    <Text style={styles.menuItemPrice}>{Number(m.prix).toFixed(2)} €</Text>
+                    <Text style={styles.menuItemPrice}>{formatPrixDevise(m.prix, devise)}</Text>
                     <Text style={styles.menuItemAdd}>+</Text>
                   </TouchableOpacity>
                 )}
@@ -296,13 +298,13 @@ export default function CommandesScreen() {
                       <Text style={styles.cartQtyBtn}>+</Text>
                     </TouchableOpacity>
                     <Text style={styles.cartName}>{c.nom}</Text>
-                    <Text style={styles.cartPrice}>{(c.prix * c.quantite).toFixed(2)} €</Text>
+                    <Text style={styles.cartPrice}>{formatPrixDevise(c.prix * c.quantite, devise)}</Text>
                     <TouchableOpacity onPress={() => removeFromCart(c.menuId)}>
                       <Text style={styles.cartRemove}>🗑</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
-                <Text style={styles.cartTotal}>Total: {totalCart.toFixed(2)} €</Text>
+                <Text style={styles.cartTotal}>Total: {formatPrixDevise(totalCart, devise)}</Text>
               </>
             )}
 

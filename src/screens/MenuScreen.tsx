@@ -15,6 +15,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import { menuApi } from '../services/api';
 import { showToast } from '../services/toast';
@@ -25,6 +26,7 @@ import ActionSheet from '../components/ActionSheet';
 
 export default function MenuScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
+  const devise = useSelector(selectDevise);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const [categories, setCategories] = useState<any[]>([]);
   const [menus, setMenus] = useState<any[]>([]);
@@ -41,6 +43,8 @@ export default function MenuScreen() {
   const [newCat, setNewCat] = useState({ nom: '', ordreService: '1', destination: 'CUISINE' });
   const [menuImage, setMenuImage] = useState<string | null>(null);
   const [editMenuImage, setEditMenuImage] = useState<string | null>(null);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [viewerImageUri, setViewerImageUri] = useState('');
 
   const loadData = async () => {
     try {
@@ -226,8 +230,12 @@ export default function MenuScreen() {
             activeOpacity={isManager ? 0.7 : 1}
           >
             {item.image ? (
-              <Image source={{ uri: API_URL + item.image }} style={styles.menuThumb} />
-            ) : null}
+              <TouchableOpacity onPress={() => { setViewerImageUri(API_URL + item.image); setShowImageViewer(true); }}>
+                <Image source={{ uri: API_URL + item.image }} style={styles.menuThumb} />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.menuThumbPlaceholder}><Text style={styles.menuThumbPlaceholderText}>🍽</Text></View>
+            )}
             <View style={styles.menuInfo}>
               <View style={styles.menuNameRow}>
                 <Text style={styles.menuName}>{item.nom}</Text>
@@ -236,7 +244,7 @@ export default function MenuScreen() {
               <Text style={styles.menuCat}>{getCatName(item.categorieId)} • {item.tempsPreparation} min</Text>
             </View>
             <View style={styles.menuRight}>
-              <Text style={styles.menuPrice}>{Number(item.prix).toFixed(2)} €</Text>
+              <Text style={styles.menuPrice}>{formatPrixDevise(item.prix, devise)}</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -258,7 +266,7 @@ export default function MenuScreen() {
       <ActionSheet
         visible={showActionModal}
         title={selectedMenu?.nom}
-        subtitle={`${Number(selectedMenu?.prix).toFixed(2)} € • ${getCatName(selectedMenu?.categorieId)}`}
+        subtitle={`${formatPrixDevise(selectedMenu?.prix || 0, devise)} • ${getCatName(selectedMenu?.categorieId)}`}
         actions={[
           {
             icon: selectedMenu?.disponibilite ? '👁' : '👁‍🗨',
@@ -288,7 +296,7 @@ export default function MenuScreen() {
             <Text style={styles.modalTitle}>Ajouter un Plat</Text>
             <Text style={styles.fieldLabel}>Nom du plat</Text>
             <TextInput style={styles.field} placeholder="Ex: Poulet DG" value={newMenu.nom} onChangeText={(t) => setNewMenu({ ...newMenu, nom: t })} />
-            <Text style={styles.fieldLabel}>Prix (€)</Text>
+            <Text style={styles.fieldLabel}>{`Prix (${devise})`}</Text>
             <TextInput style={styles.field} placeholder="Ex: 12.50" keyboardType="decimal-pad" value={newMenu.prix} onChangeText={(t) => setNewMenu({ ...newMenu, prix: t })} />
             <Text style={styles.fieldLabel}>Catégorie</Text>
             <View style={styles.chipRow}>
@@ -321,7 +329,7 @@ export default function MenuScreen() {
             <Text style={styles.modalTitle}>Modifier le Plat</Text>
             <Text style={styles.fieldLabel}>Nom du plat</Text>
             <TextInput style={styles.field} placeholder="Ex: Poulet DG" value={editMenuState.nom} onChangeText={(t) => setEditMenuState({ ...editMenuState, nom: t })} />
-            <Text style={styles.fieldLabel}>Prix (€)</Text>
+            <Text style={styles.fieldLabel}>{`Prix (${devise})`}</Text>
             <TextInput style={styles.field} placeholder="Ex: 12.50" keyboardType="decimal-pad" value={editMenuState.prix} onChangeText={(t) => setEditMenuState({ ...editMenuState, prix: t })} />
             <Text style={styles.fieldLabel}>Catégorie</Text>
             <View style={styles.chipRow}>
@@ -369,6 +377,16 @@ export default function MenuScreen() {
               <TouchableOpacity style={styles.saveBtn} onPress={handleAddCat}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* Image Viewer Modal */}
+      <Modal visible={showImageViewer} transparent animationType="fade">
+        <View style={styles.viewerOverlay}>
+          <TouchableOpacity style={styles.viewerCloseBtn} onPress={() => setShowImageViewer(false)}>
+            <Text style={styles.viewerCloseText}>✕</Text>
+          </TouchableOpacity>
+          <Image source={{ uri: viewerImageUri }} style={styles.viewerImage} resizeMode="contain" />
         </View>
       </Modal>
     </View>
@@ -431,4 +449,10 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', padding: 50 },
   emptyIcon: { fontSize: 50, marginBottom: 10 },
   emptyText: { color: Colors.textLight, fontSize: 16 },
+  menuThumbPlaceholder: { width: 50, height: 50, borderRadius: 10, marginRight: 10, backgroundColor: Colors.inputBg, justifyContent: 'center', alignItems: 'center' },
+  menuThumbPlaceholderText: { fontSize: 22 },
+  viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  viewerCloseBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  viewerCloseText: { color: Colors.textWhite, fontSize: 20, fontWeight: '700' },
+  viewerImage: { width: '100%', height: '70%' },
 });

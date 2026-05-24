@@ -11,11 +11,15 @@ import {
   Dimensions,
   StatusBar,
   ActivityIndicator,
+  Modal,
+  Alert,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { login, clearError } from '../store/slices/authSlice';
 import { RootState, AppDispatch } from '../store';
 import { Colors } from '../theme/colors';
+import { authApi } from '../services/api';
+import { showToast } from '../services/toast';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +30,10 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotPhone, setForgotPhone] = useState('');
+  const [forgotPassword, setForgotPassword] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -45,6 +53,24 @@ export default function LoginScreen() {
   const handleLogin = () => {
     if (!telephone.trim() || !password.trim()) return;
     dispatch(login({ telephone: telephone.trim(), mot_de_passe: password }));
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotPhone.trim() || !forgotPassword.trim()) {
+      return Alert.alert('Erreur', 'Remplissez tous les champs');
+    }
+    setForgotLoading(true);
+    try {
+      await authApi.forgotPassword({ telephone: forgotPhone.trim(), newPassword: forgotPassword });
+      setShowForgotModal(false);
+      setForgotPhone('');
+      setForgotPassword('');
+      Alert.alert('Succès', 'Mot de passe réinitialisé. Vous pouvez vous connecter avec votre nouveau mot de passe.');
+    } catch (err: any) {
+      Alert.alert('Erreur', err.response?.data?.message || 'Réinitialisation échouée');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
@@ -135,11 +161,56 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
+          {/* Forgot password */}
+          <TouchableOpacity style={styles.forgotBtn} onPress={() => setShowForgotModal(true)}>
+            <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+          </TouchableOpacity>
+
           <Text style={styles.footerText}>
             Application sécurisée • Tous droits réservés
           </Text>
         </Animated.View>
       </KeyboardAvoidingView>
+
+      {/* Forgot Password Modal */}
+      <Modal visible={showForgotModal} transparent animationType="fade">
+        <View style={styles.forgotOverlay}>
+          <View style={styles.forgotCard}>
+            <Text style={styles.forgotTitle}>Réinitialiser le mot de passe</Text>
+            <Text style={styles.forgotSubtitle}>Entrez votre numéro et un nouveau mot de passe</Text>
+            <TextInput
+              style={styles.forgotInput}
+              placeholder="Téléphone"
+              placeholderTextColor={Colors.textLight}
+              keyboardType="phone-pad"
+              value={forgotPhone}
+              onChangeText={setForgotPhone}
+            />
+            <TextInput
+              style={styles.forgotInput}
+              placeholder="Nouveau mot de passe"
+              placeholderTextColor={Colors.textLight}
+              secureTextEntry
+              value={forgotPassword}
+              onChangeText={setForgotPassword}
+            />
+            <TouchableOpacity
+              style={[styles.forgotSubmit, forgotLoading && { opacity: 0.6 }]}
+              onPress={handleForgotPassword}
+              disabled={forgotLoading}
+            >
+              {forgotLoading ? (
+                <ActivityIndicator color={Colors.textWhite} />
+              ) : (
+                <Text style={styles.forgotSubmitText}>Réinitialiser</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.forgotCancel} onPress={() => { setShowForgotModal(false); setForgotPhone(''); setForgotPassword(''); }}>
+              <Text style={styles.forgotCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -303,4 +374,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 20,
   },
+  forgotBtn: { alignItems: 'center', marginTop: 16 },
+  forgotText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
+  forgotOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  forgotCard: { backgroundColor: Colors.surface, borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 },
+  forgotTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, textAlign: 'center', marginBottom: 6 },
+  forgotSubtitle: { fontSize: 13, color: Colors.textLight, textAlign: 'center', marginBottom: 20 },
+  forgotInput: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, color: Colors.text, borderWidth: 1, borderColor: Colors.border, marginBottom: 12 },
+  forgotSubmit: { backgroundColor: Colors.primary, borderRadius: 14, height: 48, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  forgotSubmitText: { color: Colors.textWhite, fontWeight: '700', fontSize: 16 },
+  forgotCancel: { alignItems: 'center', marginTop: 14, paddingVertical: 8 },
+  forgotCancelText: { color: Colors.textLight, fontSize: 14 },
 });
