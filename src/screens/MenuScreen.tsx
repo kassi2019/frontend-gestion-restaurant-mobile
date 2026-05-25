@@ -11,6 +11,7 @@ import {
   TextInput,
   Alert,
   Image,
+  ScrollView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSelector } from 'react-redux';
@@ -29,6 +30,16 @@ export default function MenuScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const devise = useSelector(selectDevise);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+
+  const formatMontant = (val: string) => {
+    if (!val) return '';
+    const raw = val.replace(/,/g, '');
+    const parts = raw.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  };
+
+  const parseMontant = (val: string) => val.replace(/,/g, '');
   const { columns, sp } = useResponsive();
   const [categories, setCategories] = useState<any[]>([]);
   const [menus, setMenus] = useState<any[]>([]);
@@ -40,6 +51,8 @@ export default function MenuScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
+  const [showCatPickerAdd, setShowCatPickerAdd] = useState(false);
+  const [showCatPickerEdit, setShowCatPickerEdit] = useState(false);
   const [newMenu, setNewMenu] = useState({ nom: '', prix: '', categorieId: 0 });
   const [editMenuState, setEditMenuState] = useState({ id: 0, nom: '', prix: '', categorieId: 0 });
   const [newCat, setNewCat] = useState({ nom: '', ordreService: '1', destination: 'CUISINE' });
@@ -101,7 +114,7 @@ export default function MenuScreen() {
     try {
       const res = await menuApi.createMenu({
         nom: newMenu.nom,
-        prix: parseFloat(newMenu.prix),
+        prix: parseFloat(parseMontant(newMenu.prix)),
         categorieId: newMenu.categorieId || categories[0]?.id,
       });
       if (menuImage) {
@@ -109,7 +122,6 @@ export default function MenuScreen() {
         formData.append('image', { uri: menuImage, type: 'image/jpeg', name: 'menu.jpg' } as any);
         await menuApi.uploadImage(res.data.id, formData);
       }
-      setShowAddModal(false);
       setNewMenu({ nom: '', prix: '', categorieId: 0 });
       setMenuImage(null);
       showToast.success(`Plat "${newMenu.nom}" créé`);
@@ -124,7 +136,7 @@ export default function MenuScreen() {
     try {
       await menuApi.updateMenu(editMenuState.id, {
         nom: editMenuState.nom,
-        prix: parseFloat(editMenuState.prix),
+        prix: parseFloat(parseMontant(editMenuState.prix)),
         categorieId: editMenuState.categorieId || undefined,
       });
       if (editMenuImage) {
@@ -165,7 +177,6 @@ export default function MenuScreen() {
         ordreService: parseInt(newCat.ordreService),
         destination: newCat.destination,
       });
-      setShowCatModal(false);
       setNewCat({ nom: '', ordreService: '1', destination: 'CUISINE' });
       showToast.success(`Catégorie "${newCat.nom}" créée`);
       loadData();
@@ -296,26 +307,38 @@ export default function MenuScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Ajouter un Plat</Text>
-            <Text style={styles.fieldLabel}>Nom du plat</Text>
-            <TextInput style={styles.field} placeholder="Ex: Poulet DG" value={newMenu.nom} onChangeText={(t) => setNewMenu({ ...newMenu, nom: t })} />
-            <Text style={styles.fieldLabel}>{`Prix (${devise})`}</Text>
-            <TextInput style={styles.field} placeholder="Ex: 12.50" keyboardType="decimal-pad" value={newMenu.prix} onChangeText={(t) => setNewMenu({ ...newMenu, prix: t })} />
-            <Text style={styles.fieldLabel}>Catégorie</Text>
-            <View style={styles.chipRow}>
-              {catOptions.map((opt) => (
-                <TouchableOpacity key={opt.value} style={[styles.optChip, newMenu.categorieId === parseInt(opt.value) && styles.optChipActive]} onPress={() => setNewMenu({ ...newMenu, categorieId: parseInt(opt.value) })}>
-                  <Text style={newMenu.categorieId === parseInt(opt.value) ? styles.optChipTextActive : styles.optChipText}>{opt.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.fieldLabel}>Image</Text>
-            <TouchableOpacity style={styles.imageBtn} onPress={() => pickImage(false)}>
-              {menuImage ? (
-                <Image source={{ uri: menuImage }} style={styles.imagePreview} />
-              ) : (
-                <Text style={styles.imageBtnText}>📷 Choisir une photo</Text>
-              )}
-            </TouchableOpacity>
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+              <Text style={styles.fieldLabel}>Nom du plat</Text>
+              <TextInput style={styles.field} placeholder="Ex: Poulet DG" value={newMenu.nom} onChangeText={(t) => setNewMenu({ ...newMenu, nom: t })} />
+              <Text style={styles.fieldLabel}>{`Prix (${devise})`}</Text>
+              <TextInput
+                style={styles.field}
+                placeholder="Ex: 12.50"
+                keyboardType="decimal-pad"
+                value={newMenu.prix}
+                onChangeText={(t) => setNewMenu({ ...newMenu, prix: t.replace(/,/g, '') })}
+                onBlur={() => setNewMenu({ ...newMenu, prix: formatMontant(newMenu.prix) })}
+                onFocus={() => setNewMenu({ ...newMenu, prix: parseMontant(newMenu.prix) })}
+              />
+              <Text style={styles.fieldLabel}>Catégorie</Text>
+              <TouchableOpacity
+                style={styles.selectField}
+                onPress={() => setShowCatPickerAdd(true)}
+              >
+                <Text style={newMenu.categorieId ? styles.selectText : styles.selectPlaceholder}>
+                  {newMenu.categorieId ? categories.find(c => c.id === newMenu.categorieId)?.nom : 'Sélectionner une catégorie'}
+                </Text>
+                <Text style={styles.selectArrow}>▼</Text>
+              </TouchableOpacity>
+              <Text style={styles.fieldLabel}>Image</Text>
+              <TouchableOpacity style={styles.imageBtn} onPress={() => pickImage(false)}>
+                {menuImage ? (
+                  <Image source={{ uri: menuImage }} style={styles.imagePreview} />
+                ) : (
+                  <Text style={styles.imageBtnText}>📷 Choisir une photo</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleAddMenu}><Text style={styles.saveText}>Ajouter</Text></TouchableOpacity>
@@ -323,32 +346,52 @@ export default function MenuScreen() {
           </View>
         </View>
       </Modal>
+      <ModalPicker
+        visible={showCatPickerAdd}
+        title="Catégorie"
+        options={catOptions}
+        selectedValue={newMenu.categorieId.toString()}
+        onSelect={(val) => { setNewMenu({ ...newMenu, categorieId: parseInt(val) }); setShowCatPickerAdd(false); }}
+        onClose={() => setShowCatPickerAdd(false)}
+      />
 
       {/* Edit Menu Modal */}
       <Modal visible={showEditModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Modifier le Plat</Text>
-            <Text style={styles.fieldLabel}>Nom du plat</Text>
-            <TextInput style={styles.field} placeholder="Ex: Poulet DG" value={editMenuState.nom} onChangeText={(t) => setEditMenuState({ ...editMenuState, nom: t })} />
-            <Text style={styles.fieldLabel}>{`Prix (${devise})`}</Text>
-            <TextInput style={styles.field} placeholder="Ex: 12.50" keyboardType="decimal-pad" value={editMenuState.prix} onChangeText={(t) => setEditMenuState({ ...editMenuState, prix: t })} />
-            <Text style={styles.fieldLabel}>Catégorie</Text>
-            <View style={styles.chipRow}>
-              {catOptions.map((opt) => (
-                <TouchableOpacity key={opt.value} style={[styles.optChip, editMenuState.categorieId === parseInt(opt.value) && styles.optChipActive]} onPress={() => setEditMenuState({ ...editMenuState, categorieId: parseInt(opt.value) })}>
-                  <Text style={editMenuState.categorieId === parseInt(opt.value) ? styles.optChipTextActive : styles.optChipText}>{opt.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.fieldLabel}>Image</Text>
-            <TouchableOpacity style={styles.imageBtn} onPress={() => pickImage(true)}>
-              {editMenuImage ? (
-                <Image source={{ uri: editMenuImage }} style={styles.imagePreview} />
-              ) : (
-                <Text style={styles.imageBtnText}>📷 Choisir une photo</Text>
-              )}
-            </TouchableOpacity>
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+              <Text style={styles.fieldLabel}>Nom du plat</Text>
+              <TextInput style={styles.field} placeholder="Ex: Poulet DG" value={editMenuState.nom} onChangeText={(t) => setEditMenuState({ ...editMenuState, nom: t })} />
+              <Text style={styles.fieldLabel}>{`Prix (${devise})`}</Text>
+              <TextInput
+                style={styles.field}
+                placeholder="Ex: 12.50"
+                keyboardType="decimal-pad"
+                value={editMenuState.prix}
+                onChangeText={(t) => setEditMenuState({ ...editMenuState, prix: t.replace(/,/g, '') })}
+                onBlur={() => setEditMenuState({ ...editMenuState, prix: formatMontant(editMenuState.prix) })}
+                onFocus={() => setEditMenuState({ ...editMenuState, prix: parseMontant(editMenuState.prix) })}
+              />
+              <Text style={styles.fieldLabel}>Catégorie</Text>
+              <TouchableOpacity
+                style={styles.selectField}
+                onPress={() => setShowCatPickerEdit(true)}
+              >
+                <Text style={editMenuState.categorieId ? styles.selectText : styles.selectPlaceholder}>
+                  {editMenuState.categorieId ? categories.find(c => c.id === editMenuState.categorieId)?.nom : 'Sélectionner une catégorie'}
+                </Text>
+                <Text style={styles.selectArrow}>▼</Text>
+              </TouchableOpacity>
+              <Text style={styles.fieldLabel}>Image</Text>
+              <TouchableOpacity style={styles.imageBtn} onPress={() => pickImage(true)}>
+                {editMenuImage ? (
+                  <Image source={{ uri: editMenuImage }} style={styles.imagePreview} />
+                ) : (
+                  <Text style={styles.imageBtnText}>📷 Choisir une photo</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleEditMenu}><Text style={styles.saveText}>Enregistrer</Text></TouchableOpacity>
@@ -356,6 +399,14 @@ export default function MenuScreen() {
           </View>
         </View>
       </Modal>
+      <ModalPicker
+        visible={showCatPickerEdit}
+        title="Catégorie"
+        options={catOptions}
+        selectedValue={editMenuState.categorieId.toString()}
+        onSelect={(val) => { setEditMenuState({ ...editMenuState, categorieId: parseInt(val) }); setShowCatPickerEdit(false); }}
+        onClose={() => setShowCatPickerEdit(false)}
+      />
 
       {/* Add Category Modal */}
       <Modal visible={showCatModal} transparent animationType="slide">
@@ -427,10 +478,26 @@ const styles = StyleSheet.create({
   },
   fabText: { color: Colors.textWhite, fontSize: 28, fontWeight: '300', marginTop: -2 },
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: '80%' },
+  modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: '85%' },
+  modalScroll: { flexShrink: 1 },
+  modalScrollContent: { paddingBottom: 8 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 20, textAlign: 'center' },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: Colors.secondary, marginBottom: 6, marginTop: 12 },
   field: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 15, color: Colors.text, borderWidth: 1, borderColor: Colors.border },
+  selectField: {
+    backgroundColor: Colors.inputBg,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 46,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectText: { fontSize: 15, color: Colors.text },
+  selectPlaceholder: { fontSize: 15, color: Colors.textLight },
+  selectArrow: { fontSize: 12, color: Colors.textLight },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   optChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, marginTop: 8, marginRight: 8, alignSelf: 'flex-start' },
   optChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },

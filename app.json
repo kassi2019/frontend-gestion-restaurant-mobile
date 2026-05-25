@@ -29,10 +29,19 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#E86B2A"
       },
-      "package": "com.fabricekassi.gestionrestomobile"
+      "package": "com.fabricekassi.gestionrestomobile",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6477ea25-17a7-49a0-9fdc-2b30ed8573e8"
+      }
+    },
+    "owner": "fabricekassi"
   }
 }

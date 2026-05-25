@@ -12,29 +12,48 @@ import { useNavigation } from '@react-navigation/native';
 import { RootState } from '../store';
 import { Colors } from '../theme/colors';
 import StatCard from '../components/StatCard';
-import { tablesApi, commandesApi } from '../services/api';
+import { commandesApi } from '../services/api';
+import { getSocket } from '../services/socket';
 
 export default function DashboardScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const navigation = useNavigation<any>();
-  const [stats, setStats] = useState({ tables: 0, commandes: 0, serveurs: 0 });
+  const [stats, setStats] = useState({
+    totalTables: 0,
+    totalCommandes: 0,
+    enAttente: 0,
+    validees: 0,
+    enPreparation: 0,
+    pretes: 0,
+    servies: 0,
+    payees: 0,
+  });
   const [refreshing, setRefreshing] = useState(false);
+
+  const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
   const loadStats = async () => {
     try {
-      const [tablesRes, commandesRes] = await Promise.all([
-        tablesApi.getAll(),
-        commandesApi.getByServeur(),
-      ]);
-      setStats({
-        tables: tablesRes.data.length,
-        commandes: commandesRes.data.length,
-        serveurs: 0,
-      });
+      const { data } = await commandesApi.getStats();
+      setStats(data);
     } catch (err) {}
   };
 
-  useEffect(() => { loadStats(); }, []);
+  useEffect(() => {
+    loadStats();
+
+    // Actualisation automatique via socket
+    const socket = getSocket();
+    if (socket) {
+      const refresh = () => loadStats();
+      socket.on('nouvelle_commande', refresh);
+      socket.on('commande_status_change', refresh);
+      return () => {
+        socket.off('nouvelle_commande', refresh);
+        socket.off('commande_status_change', refresh);
+      };
+    }
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -66,6 +85,14 @@ export default function DashboardScreen() {
 
   const filteredMenu = menuItems.filter((item) => item.roles.includes(user?.role || ''));
 
+  const commandeCards = [
+    { title: 'En attente', value: stats.enAttente, icon: '⏳', color: Colors.warning },
+    { title: 'Validées', value: stats.validees, icon: '✅', color: Colors.success },
+    { title: 'En prépa.', value: stats.enPreparation, icon: '👨‍🍳', color: Colors.accent },
+    { title: 'Prêtes', value: stats.pretes, icon: '🍽', color: Colors.primary },
+    { title: 'Servies', value: stats.servies, icon: '📋', color: Colors.secondary },
+  ];
+
   return (
     <ScrollView
       style={styles.container}
@@ -84,12 +111,18 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Stats Cards */}
-      <View style={styles.statsRow}>
-        <StatCard title="Tables" value={stats.tables} icon="🪑" color={Colors.primary} />
-        <StatCard title="Commandes" value={stats.commandes} icon="📋" color={Colors.accent} />
-        <StatCard title="Serveurs" value={stats.serveurs} icon="👤" color={Colors.success} />
-      </View>
+      {/* Commandes Cards */}
+      <Text style={styles.sectionTitle}>Commandes du jour</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.statsScroll}
+        contentContainerStyle={styles.statsScrollContent}
+      >
+        {commandeCards.map((card, i) => (
+          <StatCard key={i} title={card.title} value={card.value} icon={card.icon} color={card.color} />
+        ))}
+      </ScrollView>
 
       {/* Menu Grid */}
       <Text style={styles.sectionTitle}>Accès Rapide</Text>
@@ -149,18 +182,22 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
   },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 14,
-    marginTop: 10,
-  },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
     paddingHorizontal: 20,
-    marginTop: 24,
-    marginBottom: 12,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  tableCardRow: {
+    paddingHorizontal: 14,
+  },
+  statsScroll: {
+    flexGrow: 0,
+  },
+  statsScrollContent: {
+    paddingHorizontal: 14,
   },
   menuGrid: {
     flexDirection: 'row',

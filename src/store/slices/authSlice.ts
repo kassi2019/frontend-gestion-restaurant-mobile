@@ -11,6 +11,7 @@ interface User {
   restaurantId: number;
   devise?: string;
   restaurantNom?: string;
+  restaurantTelephone?: string;
 }
 
 interface AuthState {

@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { store } from '../store';
+import { showToast } from './toast';
 
 const SOCKET_URL = 'http://192.168.1.7:3000';
 
@@ -18,7 +19,27 @@ export function connectSocket() {
     }
   });
 
-  socket.on('disconnect', () => { /* reconnexion automatique */ });
+  // Écoute des événements en temps réel
+  socket.on('nouvelle_commande', (data: any) => {
+    showToast.warning(`Nouvelle commande • Table ${data.table?.numero || '?'}`);
+  });
+
+  socket.on('commande_status_change', (data: any) => {
+    const label = data.label || data.statut;
+    showToast.success(`Table ${data.tableNumero} → ${label}`);
+  });
+
+  socket.on('notification_admin', (data: any) => {
+    showToast.warning(data.message || 'Notification admin');
+  });
+
+  socket.on('connect_error', () => {
+    // reconnexion automatique gérée par socket.io
+  });
+
+  socket.on('disconnect', () => {
+    // reconnexion automatique gérée par socket.io
+  });
 
   return socket;
 }

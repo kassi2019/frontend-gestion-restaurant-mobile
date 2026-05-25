@@ -15,6 +15,7 @@ import { RootState } from '../store';
 import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import { commandesApi, tablesApi, menuApi } from '../services/api';
+import { getSocket } from '../services/socket';
 import { showToast } from '../services/toast';
 import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 import useResponsive from '../hooks/useResponsive';
@@ -73,7 +74,19 @@ export default function CommandesScreen() {
     }
   };
 
-  useEffect(() => { loadCommandes(); }, []);
+  useEffect(() => {
+    loadCommandes();
+    const socket = getSocket();
+    if (socket) {
+      const refresh = () => loadCommandes();
+      socket.on('nouvelle_commande', refresh);
+      socket.on('commande_status_change', refresh);
+      return () => {
+        socket.off('nouvelle_commande', refresh);
+        socket.off('commande_status_change', refresh);
+      };
+    }
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -126,7 +139,8 @@ export default function CommandesScreen() {
     if (cart.length === 0) return Alert.alert('Erreur', 'Ajoutez au moins un article');
     try {
       await commandesApi.createFromClient({ tableId: selectedTableId, articles: cart.map((c) => ({ menuId: c.menuId, quantite: c.quantite })) });
-      setShowCreateModal(false);
+      setCart([]);
+      setSelectedTableId(0);
       showToast.success('Commande créée');
       loadCommandes();
     } catch (err: any) {

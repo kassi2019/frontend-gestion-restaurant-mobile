@@ -89,6 +89,8 @@ export const serveurTablesApi = {
   findByTable: (tableId: number) => api.get(`/serveur-tables/table/${tableId}`),
   assign: (data: { utilisateurId: number; tableId: number }) =>
     api.post('/serveur-tables', data),
+  assignBulk: (data: { utilisateurId: number; tableIds: number[] }) =>
+    api.post('/serveur-tables/bulk', data),
   unassign: (tableId: number) => api.delete(`/serveur-tables/${tableId}`),
   reassign: (data: { fromServeurId: number; toServeurId: number; tableId?: number }) =>
     api.patch('/serveur-tables/reassign', data),
@@ -101,6 +103,7 @@ export const commandesApi = {
   getByTable: (tableId: number) => api.get(`/commandes/table/${tableId}`),
   getByCuisine: () => api.get('/commandes/cuisine'),
   getByBar: () => api.get('/commandes/bar'),
+  getStats: () => api.get('/commandes/stats'),
   updateStatut: (id: number, statut: string) =>
     api.patch(`/commandes/${id}/statut`, { statut }),
   updateDetailStatut: (id: number, statut: string) =>
@@ -129,6 +132,7 @@ export const paiementApi = {
   payer: (commandeId: number, mode: string) => api.post(`/paiements/payer/${commandeId}`, { mode }),
   getFactures: (date?: string) => api.get('/paiements/factures', { params: date ? { date } : {} }),
   getFacture: (id: number) => api.get(`/paiements/factures/${id}`),
+  imprimerFacture: (id: number) => `${API_URL}/paiements/factures/${id}/imprimer`,
   getCaisseJour: () => api.get('/paiements/caisse/jour'),
   cloturerCaisse: () => api.post('/paiements/caisse/cloture'),
 };
@@ -139,6 +143,12 @@ export const statistiquesApi = {
   getPlatsPopulaires: (limit?: number) => api.get('/statistiques/plats-populaires', { params: { limit } }),
   getPerformanceServeurs: () => api.get('/statistiques/performance-serveurs'),
   getAffluence: () => api.get('/statistiques/affluence'),
+};
+
+export const restaurantApi = {
+  getInfo: (id: number) => api.get(`/restaurants/${id}`),
+  update: (id: number, data: { nom?: string; adresse?: string; devise?: string; telephone?: string }) =>
+    api.patch(`/restaurants/${id}`, data),
 };
 
 export const usersApi = {

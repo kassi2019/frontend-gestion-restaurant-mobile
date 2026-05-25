@@ -142,7 +142,7 @@ export default function PlanningScreen() {
         heureDebut: form.heureDebut,
         heureFin: form.heureFin,
       });
-      setShowCreateModal(false);
+      setForm({ jour: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
       showToast.success('Planning créé');
       loadPlannings();
     } catch (err: any) {

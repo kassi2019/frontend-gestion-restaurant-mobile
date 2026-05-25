@@ -20,6 +20,8 @@ import CashierScreen from '../screens/CashierScreen';
 import StatsScreen from '../screens/StatsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import RestaurantSettingsScreen from '../screens/RestaurantSettingsScreen';
+import AssignTablesScreen from '../screens/AssignTablesScreen';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
 const Stack = createStackNavigator();
@@ -154,6 +156,8 @@ export default function AppNavigator() {
             <Stack.Screen name="Cashier" component={CashierScreen} options={{ headerShown: true, headerTitle: 'Caisse', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Stats" component={StatsScreen} options={{ headerShown: true, headerTitle: 'Statistiques', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, headerTitle: 'Mon Profil', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen name="RestaurantSettings" component={RestaurantSettingsScreen} options={{ headerShown: true, headerTitle: 'Paramètres Restaurant', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen name="AssignTables" component={AssignTablesScreen} options={{ headerShown: true, headerTitle: 'Affecter les tables', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
           </>
         )}
       </Stack.Navigator>

@@ -92,7 +92,6 @@ export default function UsersScreen() {
         role: createForm.role,
         restaurantId: user!.restaurantId,
       });
-      setShowCreateModal(false);
       setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' });
       showToast.success(`Utilisateur "${createForm.nom}" créé`);
       loadUsers();

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert,
+  RefreshControl, ActivityIndicator, Alert, Linking,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
@@ -44,9 +44,17 @@ export default function CashierScreen() {
   const handlePayer = async (mode: string) => {
     if (!selectedCommande) return;
     try {
-      await paiementApi.payer(selectedCommande.id, mode);
+      const { data } = await paiementApi.payer(selectedCommande.id, mode);
       setShowActionModal(false);
-      showToast.success('Paiement effectué');
+      const factureId = data?.facture?.id;
+      if (factureId) {
+        Alert.alert('✅ Paiement effectué', `Facture ${data.facture.numero}\nMontant: ${Number(data.facture.montant).toFixed(2)} ${devise}`, [
+          { text: 'Fermer', style: 'cancel' },
+          { text: '🖨 Imprimer', onPress: () => Linking.openURL(paiementApi.imprimerFacture(factureId)) },
+        ]);
+      } else {
+        showToast.success('Paiement effectué');
+      }
       loadData();
     } catch (err: any) {
       showToast.error(err.response?.data?.message || 'Échec du paiement');

@@ -12,9 +12,11 @@ import {
   TextInput,
 } from 'react-native';
 import { useSelector } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
 import { RootState } from '../store';
 import { Colors } from '../theme/colors';
 import { tablesApi, serveurTablesApi, usersApi, commandesApi } from '../services/api';
+import { getSocket } from '../services/socket';
 import { showToast } from '../services/toast';
 import ModalPicker from '../components/ModalPicker';
 import ActionSheet from '../components/ActionSheet';
@@ -30,6 +32,7 @@ const ZONES = ['Terrasse', 'Intérieur', 'VIP'];
 
 export default function TablesScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
+  const navigation = useNavigation<any>();
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const { columns, sp } = useResponsive();
   const [tables, setTables] = useState<any[]>([]);
@@ -65,7 +68,19 @@ export default function TablesScreen() {
     }
   };
 
-  useEffect(() => { loadTables(); }, []);
+  useEffect(() => {
+    loadTables();
+    const socket = getSocket();
+    if (socket) {
+      const refresh = () => loadTables();
+      socket.on('commande_status_change', refresh);
+      socket.on('nouvelle_commande', refresh);
+      return () => {
+        socket.off('commande_status_change', refresh);
+        socket.off('nouvelle_commande', refresh);
+      };
+    }
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -89,7 +104,6 @@ export default function TablesScreen() {
     if (!newTable.numero.trim()) return Alert.alert('Erreur', 'Le numéro est requis');
     try {
       await tablesApi.create(newTable);
-      setShowCreateModal(false);
       setNewTable({ numero: '', zone: 'Terrasse' });
       showToast.success(`Table ${newTable.numero} créée`);
       loadTables();
@@ -256,9 +270,14 @@ export default function TablesScreen() {
       />
 
       {isManager && (
-        <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
+            <Text style={styles.fabText}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.assignFab} onPress={() => navigation.navigate('AssignTables')}>
+            <Text style={styles.assignFabText}>👤</Text>
+          </TouchableOpacity>
+        </>
       )}
 
       {/* Action Sheet */}
@@ -454,6 +473,12 @@ const styles = StyleSheet.create({
     shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 8,
   },
   fabText: { color: Colors.textWhite, fontSize: 28, fontWeight: '300', marginTop: -2 },
+  assignFab: {
+    position: 'absolute', bottom: 160, right: 20, width: 56, height: 56, borderRadius: 28,
+    backgroundColor: Colors.secondary, justifyContent: 'center', alignItems: 'center',
+    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 8,
+  },
+  assignFabText: { fontSize: 22 },
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 20, textAlign: 'center' },
@@ -490,13 +515,13 @@ const styles = StyleSheet.create({
   assignCurrent: { fontSize: 12, color: Colors.primary, fontWeight: '600' },
   checkFab: {
     position: 'absolute', bottom: 90, right: 20,
-    width: 48, height: 48, borderRadius: 24,
+    width: 56, height: 56, borderRadius: 28,
     backgroundColor: Colors.accent,
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 6, elevation: 5,
+    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 8, elevation: 8,
   },
-  checkFabText: { fontSize: 20 },
+  checkFabText: { fontSize: 22 },
   orderCard: { backgroundColor: Colors.inputBg, borderRadius: 12, padding: 12, marginBottom: 8 },
   orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   orderDate: { fontSize: 14, fontWeight: '600', color: Colors.text },

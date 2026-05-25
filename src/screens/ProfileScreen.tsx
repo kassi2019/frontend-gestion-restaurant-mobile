@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { RootState, AppDispatch } from '../store';
 import { updateUser } from '../store/slices/authSlice';
@@ -24,6 +25,7 @@ const API_URL = 'http://192.168.1.7:3000';
 export default function ProfileScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch<AppDispatch>();
+  const navigation = useNavigation<any>();
   const [photo, setPhoto] = useState<string | null>(null);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -126,6 +128,17 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* Restaurant Settings (Admin only) */}
+      {user?.role === 'ADMIN' && (
+        <TouchableOpacity
+          style={styles.restaurantBtn}
+          onPress={() => navigation.navigate('RestaurantSettings')}
+        >
+          <Text style={styles.restaurantBtnText}>🏪 Paramètres du restaurant</Text>
+          <Text style={styles.restaurantBtnArrow}>›</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Change Password */}
       <View style={styles.pwdCard}>
         <Text style={styles.sectionTitle}>Changer le mot de passe</Text>
@@ -154,6 +167,17 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border },
   infoLabel: { fontSize: 14, color: Colors.textLight },
   infoValue: { fontSize: 14, fontWeight: '600', color: Colors.text },
+  restaurantBtn: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  restaurantBtnText: { fontSize: 16, fontWeight: '600', color: Colors.text },
+  restaurantBtnArrow: { fontSize: 24, color: Colors.textLight },
   pwdCard: { backgroundColor: Colors.surface, borderRadius: 16, padding: 16 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.text, marginBottom: 16 },
   input: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 15, color: Colors.text, borderWidth: 1, borderColor: Colors.border, marginBottom: 12 },
