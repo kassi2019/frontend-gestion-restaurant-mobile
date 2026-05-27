@@ -35,6 +35,10 @@ export function connectSocket() {
     showToast.warning(data.message || 'Notification admin');
   });
 
+  socket.on('notification_user', (data: any) => {
+    showToast.warning(data.message || 'Notification');
+  });
+
   socket.on('connect_error', () => {
     // reconnexion automatique gérée par socket.io
   });

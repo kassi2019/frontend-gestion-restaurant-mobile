@@ -45,6 +45,8 @@ export default function CommandesScreen() {
   const devise = useSelector(selectDevise);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const isServeur = user?.role === 'SERVEUR';
+  const isCuisine = user?.role === 'CUISINE';
+  const isBar = user?.role === 'BAR';
   const { sp, fs } = useResponsive();
   const [commandes, setCommandes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +67,10 @@ export default function CommandesScreen() {
     try {
       let { data } = isManager
         ? await commandesApi.getAll()
+        : isCuisine
+        ? await commandesApi.getByCuisine()
+        : isBar
+        ? await commandesApi.getByBar()
         : await commandesApi.getByServeur();
       setCommandes(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -81,9 +87,13 @@ export default function CommandesScreen() {
       const refresh = () => loadCommandes();
       socket.on('nouvelle_commande', refresh);
       socket.on('commande_status_change', refresh);
+      if (isCuisine) socket.on('nouvelle_commande_cuisine', refresh);
+      if (isBar) socket.on('nouvelle_commande_bar', refresh);
       return () => {
         socket.off('nouvelle_commande', refresh);
         socket.off('commande_status_change', refresh);
+        if (isCuisine) socket.off('nouvelle_commande_cuisine', refresh);
+        if (isBar) socket.off('nouvelle_commande_bar', refresh);
       };
     }
   }, []);
