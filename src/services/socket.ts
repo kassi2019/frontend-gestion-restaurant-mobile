@@ -2,7 +2,9 @@ import { io, Socket } from 'socket.io-client';
 import { store } from '../store';
 import { showToast } from './toast';
 
-const SOCKET_URL = 'http://192.168.1.7:3000';
+import { SERVER_URL } from '../config';
+
+const SOCKET_URL = SERVER_URL;
 
 let socket: Socket | null = null;
 

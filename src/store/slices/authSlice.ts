@@ -42,8 +42,13 @@ export const login = createAsyncThunk(
       }
       return data;
     } catch (err: any) {
-      const message = err.response?.data?.message || 'Erreur de connexion';
-      return rejectWithValue(message);
+      if (err.response) {
+        const message = err.response.data?.message || `Erreur serveur (${err.response.status})`;
+        return rejectWithValue(message);
+      }
+      if (err.code === 'ECONNABORTED') return rejectWithValue('Délai de connexion dépassé');
+      if (err.message) return rejectWithValue(`Réseau: ${err.message}`);
+      return rejectWithValue('Erreur de connexion');
     }
   },
 );

@@ -24,11 +24,8 @@ export default function StatCard({ title, value, icon, color = Colors.primary }:
 const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    margin: 6,
-    flex: 1,
-    minWidth: 150,
+    borderRadius: 14,
+    padding: 10,
     borderTopWidth: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -38,25 +35,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
-  },
-  icon: {
-    fontSize: 20,
-  },
-  value: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
     marginBottom: 4,
   },
+  icon: {
+    fontSize: 14,
+  },
+  value: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+    marginBottom: 1,
+  },
   title: {
-    fontSize: 12,
+    fontSize: 9,
     color: Colors.textLight,
-    fontWeight: '500',
+    fontWeight: '700',
   },
 });

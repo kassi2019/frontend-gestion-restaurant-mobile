@@ -2,7 +2,9 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../store';
 
-const API_URL = 'http://192.168.1.7:3000/api';
+import { SERVER_URL } from '../config';
+
+const API_URL = `${SERVER_URL}/api`;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -122,7 +124,7 @@ export const planningApi = {
 };
 
 export const notificationsApi = {
-  getAll: () => api.get('/notifications'),
+  getAll: (date?: string) => api.get('/notifications', { params: date ? { date } : {} }),
   markAsRead: (id: number) => api.patch(`/notifications/${id}/read`),
   markAllAsRead: () => api.patch('/notifications/read-all'),
 };

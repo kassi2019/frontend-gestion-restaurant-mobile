@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
@@ -18,6 +19,7 @@ import { planningApi, usersApi } from '../services/api';
 import { showToast } from '../services/toast';
 import ActionSheet from '../components/ActionSheet';
 import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
+
 import useResponsive from '../hooks/useResponsive';
 
 export default function PlanningScreen() {
@@ -33,6 +35,8 @@ export default function PlanningScreen() {
   const [showCreateDatePicker, setShowCreateDatePicker] = useState(false);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [createFilterRole, setCreateFilterRole] = useState('');
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   const [selectedPlanning, setSelectedPlanning] = useState<any>(null);
   const [serveurs, setServeurs] = useState<any[]>([]);
   const [form, setForm] = useState({ jour: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
@@ -86,9 +90,11 @@ export default function PlanningScreen() {
     }
     if (isManager && filterUserId > 0) {
       list = list.filter((p) => p.utilisateur?.id === filterUserId || p.utilisateurId === filterUserId);
+    } else if (isManager && filterRole) {
+      list = list.filter((p) => p.utilisateur?.role === filterRole);
     }
     return list;
-  }, [plannings, filterDate, filterUserId, isManager]);
+  }, [plannings, filterDate, filterUserId, filterRole, isManager]);
 
   useEffect(() => { loadPlannings(); loadServeursForFilter(); }, []);
 
@@ -301,7 +307,10 @@ export default function PlanningScreen() {
               </Text>
             </View>
             {isManager && item.utilisateur && (
-              <Text style={styles.serveurName}>{item.utilisateur.nom}</Text>
+              <View style={styles.serveurInfo}>
+                <Text style={styles.serveurName}>{item.utilisateur.nom}</Text>
+                <Text style={styles.serveurRole}>{ROLE_LABELS[item.utilisateur.role] || item.utilisateur.role}</Text>
+              </View>
             )}
           </TouchableOpacity>
         )}
@@ -347,63 +356,98 @@ export default function PlanningScreen() {
       <Modal visible={showCreateModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Nouveau Planning</Text>
-            <Text style={styles.fieldLabel}>Date</Text>
-            <TouchableOpacity style={styles.dateField} onPress={() => setShowCreateDatePicker(true)}>
-              <Text style={form.jour ? styles.dateFieldText : styles.dateFieldPlaceholder}>
-                {form.jour ? formatDisplay(form.jour) : 'Appuyez pour choisir une date'}
-              </Text>
-              <Text style={styles.dateFieldIcon}>📅</Text>
-            </TouchableOpacity>
-            <View style={styles.row}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={styles.fieldLabel}>Heure début</Text>
-                <TextInput style={styles.field} placeholder="08:00" value={form.heureDebut} onChangeText={(t) => setForm({ ...form, heureDebut: t })} />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Nouveau Planning</Text>
+              <Text style={styles.fieldLabel}>Date</Text>
+              <TouchableOpacity style={styles.dateField} onPress={() => setShowCreateDatePicker(true)}>
+                <Text style={form.jour ? styles.dateFieldText : styles.dateFieldPlaceholder}>
+                  {form.jour ? formatDisplay(form.jour) : 'Appuyez pour choisir une date'}
+                </Text>
+                <Text style={styles.dateFieldIcon}>📅</Text>
+              </TouchableOpacity>
+              <View style={styles.row}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.fieldLabel}>Heure début</Text>
+                  <TextInput style={styles.field} placeholder="08:00" value={form.heureDebut} onChangeText={(t) => setForm({ ...form, heureDebut: t })} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={styles.fieldLabel}>Heure fin</Text>
+                  <TextInput style={styles.field} placeholder="17:00" value={form.heureFin} onChangeText={(t) => setForm({ ...form, heureFin: t })} />
+                </View>
               </View>
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <Text style={styles.fieldLabel}>Heure fin</Text>
-                <TextInput style={styles.field} placeholder="17:00" value={form.heureFin} onChangeText={(t) => setForm({ ...form, heureFin: t })} />
-              </View>
-            </View>
-            {isManager && serveurs.length > 0 && (
-              <>
-                <Text style={styles.fieldLabel}>Rôle</Text>
-                <View style={styles.chipRow}>
+              {isManager && serveurs.length > 0 && (
+                <>
+                  {/* Select Rôle */}
+                  <Text style={styles.fieldLabel}>Rôle</Text>
                   <TouchableOpacity
-                    style={[styles.modalRoleChip, createFilterRole === '' && styles.modalRoleChipActive]}
-                    onPress={() => { setCreateFilterRole(''); setForm({ ...form, utilisateurId: 0 }); }}
+                    style={styles.selectField}
+                    onPress={() => { setShowRoleDropdown(!showRoleDropdown); setShowAgentDropdown(false); }}
                   >
-                    <Text style={createFilterRole === '' ? styles.modalRoleChipTextActive : styles.modalRoleChipText}>Tous</Text>
+                    <Text style={createFilterRole ? styles.selectFieldText : styles.selectFieldPlaceholder}>
+                      {createFilterRole ? ROLE_LABELS[createFilterRole] || createFilterRole : 'Sélectionnez un rôle'}
+                    </Text>
+                    <Text style={styles.selectArrow}>{showRoleDropdown ? '▲' : '▼'}</Text>
                   </TouchableOpacity>
-                  {rolesCreateDisponibles.map((role) => (
-                    <TouchableOpacity
-                      key={role}
-                      style={[styles.modalRoleChip, createFilterRole === role && { backgroundColor: ROLE_COLORS[role] || Colors.primary, borderColor: ROLE_COLORS[role] || Colors.primary }]}
-                      onPress={() => { setCreateFilterRole(createFilterRole === role ? '' : role); setForm({ ...form, utilisateurId: 0 }); }}
-                    >
-                      <Text style={createFilterRole === role ? styles.modalRoleChipTextActive : styles.modalRoleChipText}>
-                        {ROLE_LABELS[role] || role}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.fieldLabel}>Agent</Text>
-                <View style={styles.chipRow}>
-                  {agentsCreateFiltres.map((s) => (
-                    <TouchableOpacity key={s.id} style={[styles.optChip, form.utilisateurId === s.id && styles.optChipActive]} onPress={() => setForm({ ...form, utilisateurId: s.id })}>
-                      <Text style={form.utilisateurId === s.id ? styles.optChipTextActive : styles.optChipText}>{s.nom}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
-            </View>
+                  {showRoleDropdown && (
+                    <View style={styles.dropdownList}>
+                      <TouchableOpacity
+                        style={[styles.dropdownItem, createFilterRole === '' && styles.dropdownItemSelected]}
+                        onPress={() => { setCreateFilterRole(''); setForm({ ...form, utilisateurId: 0 }); setShowRoleDropdown(false); }}
+                      >
+                        <Text style={createFilterRole === '' ? styles.dropdownItemTextSelected : styles.dropdownItemText}>Tous</Text>
+                      </TouchableOpacity>
+                      {rolesCreateDisponibles.map((role) => (
+                        <TouchableOpacity
+                          key={role}
+                          style={[styles.dropdownItem, createFilterRole === role && styles.dropdownItemSelected]}
+                          onPress={() => { setCreateFilterRole(role); setForm({ ...form, utilisateurId: 0 }); setShowRoleDropdown(false); }}
+                        >
+                          <Text style={createFilterRole === role ? styles.dropdownItemTextSelected : styles.dropdownItemText}>
+                            {ROLE_LABELS[role] || role}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Select Agent */}
+                  <Text style={styles.fieldLabel}>Agent</Text>
+                  <TouchableOpacity
+                    style={styles.selectField}
+                    onPress={() => { setShowAgentDropdown(!showAgentDropdown); setShowRoleDropdown(false); }}
+                  >
+                    <Text style={form.utilisateurId ? styles.selectFieldText : styles.selectFieldPlaceholder}>
+                      {form.utilisateurId ? (serveurs.find(s => s.id === form.utilisateurId)?.nom || 'Sélectionné') : 'Sélectionnez un agent'}
+                    </Text>
+                    <Text style={styles.selectArrow}>{showAgentDropdown ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                  {showAgentDropdown && (
+                    <View style={styles.dropdownList}>
+                      <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
+                        {agentsCreateFiltres.map((a) => (
+                          <TouchableOpacity
+                            key={a.id}
+                            style={[styles.dropdownItem, form.utilisateurId === a.id && styles.dropdownItemSelected]}
+                            onPress={() => { setForm({ ...form, utilisateurId: a.id }); setShowAgentDropdown(false); }}
+                          >
+                            <Text style={form.utilisateurId === a.id ? styles.dropdownItemTextSelected : styles.dropdownItemText}>{a.nom}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </>
+              )}
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
+
+
 
       {/* Create Date Picker */}
       <CalendarPicker
@@ -480,7 +524,9 @@ const styles = StyleSheet.create({
   dividerLine: { width: 20, height: 2, backgroundColor: Colors.border },
   statutBadge: { borderRadius: 12, paddingVertical: 6, alignItems: 'center' },
   statutText: { fontWeight: '700', fontSize: 13 },
-  serveurName: { fontSize: 13, fontWeight: '600', color: Colors.secondary, textAlign: 'center', marginTop: 8 },
+  serveurInfo: { alignItems: 'center', marginTop: 8 },
+  serveurName: { fontSize: 13, fontWeight: '600', color: Colors.secondary },
+  serveurRole: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
   fab: {
     position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28,
     backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center',
@@ -496,6 +542,15 @@ const styles = StyleSheet.create({
   dateFieldText: { fontSize: 15, color: Colors.text, textTransform: 'capitalize', flex: 1 },
   dateFieldPlaceholder: { fontSize: 15, color: Colors.textLight, flex: 1 },
   dateFieldIcon: { fontSize: 18 },
+  selectField: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  selectFieldText: { fontSize: 15, color: Colors.text },
+  selectFieldPlaceholder: { fontSize: 15, color: Colors.textLight },
+  selectArrow: { fontSize: 12, color: Colors.textLight, marginLeft: 8 },
+  dropdownList: { backgroundColor: Colors.inputBg, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, marginTop: 4, paddingVertical: 4, maxHeight: 180 },
+  dropdownItem: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 8, marginHorizontal: 4 },
+  dropdownItemSelected: { backgroundColor: Colors.primary + '15' },
+  dropdownItemText: { fontSize: 14, color: Colors.text },
+  dropdownItemTextSelected: { fontSize: 14, color: Colors.primary, fontWeight: '600' },
   row: { flexDirection: 'row' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   optChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, marginTop: 4, marginRight: 6, alignSelf: 'flex-start' },

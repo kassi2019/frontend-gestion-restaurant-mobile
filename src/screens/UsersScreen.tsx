@@ -56,6 +56,8 @@ export default function UsersScreen() {
   const [showStatutModal, setShowStatutModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showRoleCreatePicker, setShowRoleCreatePicker] = useState(false);
+  const [showRoleEditPicker, setShowRoleEditPicker] = useState(false);
   const [createForm, setCreateForm] = useState({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' });
   const [editForm, setEditForm] = useState({ id: 0, nom: '', telephone: '', role: '', mot_de_passe: '' });
 
@@ -237,19 +239,27 @@ export default function UsersScreen() {
             <Text style={styles.fieldLabel}>Mot de passe</Text>
             <PasswordInput value={createForm.mot_de_passe} onChangeText={(t) => setCreateForm({ ...createForm, mot_de_passe: t })} placeholder="Mot de passe" />
             <Text style={styles.fieldLabel}>Rôle</Text>
-            <View style={styles.chipRow}>
-              {ROLE_OPTIONS.map((role) => (
-                <TouchableOpacity key={role} style={[styles.optChip, createForm.role === role && styles.optChipActive]} onPress={() => setCreateForm({ ...createForm, role })}>
-                  <Text style={createForm.role === role ? styles.optChipTextActive : styles.optChipText}>{ROLE_LABELS[role]}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity
+              style={styles.selectField}
+              onPress={() => setShowRoleCreatePicker(true)}
+            >
+              <Text style={styles.selectFieldText}>{ROLE_LABELS[createForm.role]}</Text>
+              <Text style={styles.selectFieldIcon}>▼</Text>
+            </TouchableOpacity>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
             </View>
           </View>
         </View>
+        <ModalPicker
+          visible={showRoleCreatePicker}
+          title="Choisir un rôle"
+          options={ROLE_OPTIONS.map((role) => ({ label: ROLE_LABELS[role], value: role }))}
+          selectedValue={createForm.role}
+          onSelect={(value) => setCreateForm({ ...createForm, role: value })}
+          onClose={() => setShowRoleCreatePicker(false)}
+        />
       </Modal>
 
       {/* Edit User Modal */}
@@ -262,13 +272,13 @@ export default function UsersScreen() {
             <Text style={styles.fieldLabel}>Téléphone</Text>
             <TextInput style={styles.field} placeholder="Téléphone" keyboardType="phone-pad" value={editForm.telephone} onChangeText={(t) => setEditForm({ ...editForm, telephone: t })} />
             <Text style={styles.fieldLabel}>Rôle</Text>
-            <View style={styles.chipRow}>
-              {ROLE_OPTIONS.map((role) => (
-                <TouchableOpacity key={role} style={[styles.optChip, editForm.role === role && styles.optChipActive]} onPress={() => setEditForm({ ...editForm, role })}>
-                  <Text style={editForm.role === role ? styles.optChipTextActive : styles.optChipText}>{ROLE_LABELS[role]}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity
+              style={styles.selectField}
+              onPress={() => setShowRoleEditPicker(true)}
+            >
+              <Text style={styles.selectFieldText}>{ROLE_LABELS[editForm.role] || editForm.role}</Text>
+              <Text style={styles.selectFieldIcon}>▼</Text>
+            </TouchableOpacity>
             <Text style={styles.fieldLabel}>Nouveau mot de passe (optionnel)</Text>
             <PasswordInput value={editForm.mot_de_passe} onChangeText={(t) => setEditForm({ ...editForm, mot_de_passe: t })} placeholder="Laisser vide pour ne pas changer" />
             <View style={styles.modalBtns}>
@@ -277,6 +287,14 @@ export default function UsersScreen() {
             </View>
           </View>
         </View>
+        <ModalPicker
+          visible={showRoleEditPicker}
+          title="Choisir un rôle"
+          options={ROLE_OPTIONS.map((role) => ({ label: ROLE_LABELS[role], value: role }))}
+          selectedValue={editForm.role}
+          onSelect={(value) => setEditForm({ ...editForm, role: value })}
+          onClose={() => setShowRoleEditPicker(false)}
+        />
       </Modal>
     </View>
   );
@@ -320,6 +338,9 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, marginBottom: 20, textAlign: 'center' },
   fieldLabel: { fontSize: 14, fontWeight: '600', color: Colors.secondary, marginBottom: 6, marginTop: 12 },
   field: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 15, color: Colors.text, borderWidth: 1, borderColor: Colors.border },
+  selectField: { backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46, borderWidth: 1, borderColor: Colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  selectFieldText: { fontSize: 15, color: Colors.text, flex: 1 },
+  selectFieldIcon: { fontSize: 12, color: Colors.textLight, marginLeft: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   optChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, marginTop: 4, marginRight: 6, alignSelf: 'flex-start' },
   optChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },

@@ -22,6 +22,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RestaurantSettingsScreen from '../screens/RestaurantSettingsScreen';
 import AssignTablesScreen from '../screens/AssignTablesScreen';
+import { SERVER_URL } from '../config';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
 const Stack = createStackNavigator();
@@ -37,14 +38,14 @@ const TAB_ICONS: Record<string, string> = {
   Notifications: '🔔',
 };
 
-const API_URL = 'http://192.168.1.7:3000';
+const SERVER = SERVER_URL;
 
 function MainTabs() {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<any>();
   const user = useSelector((state: RootState) => state.auth.user);
   const photoUri = user?.photo
-    ? (user.photo.startsWith('http') ? user.photo : API_URL + user.photo)
+    ? (user.photo.startsWith('http') ? user.photo : SERVER + user.photo)
     : null;
 
   return (

@@ -20,7 +20,7 @@ import { authApi } from '../services/api';
 import { showToast } from '../services/toast';
 import PasswordInput from '../components/PasswordInput';
 
-const API_URL = 'http://192.168.1.7:3000';
+import { SERVER_URL } from '../config';
 
 export default function ProfileScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -86,7 +86,7 @@ export default function ProfileScreen() {
   };
 
   const avatarUri = user?.photo
-    ? (user.photo.startsWith('http') ? user.photo : API_URL + user.photo)
+    ? (user.photo.startsWith('http') ? user.photo : SERVER_URL + user.photo)
     : null;
 
   return (

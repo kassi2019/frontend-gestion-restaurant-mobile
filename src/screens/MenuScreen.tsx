@@ -21,7 +21,7 @@ import { Colors } from '../theme/colors';
 import { menuApi } from '../services/api';
 import { showToast } from '../services/toast';
 
-const API_URL = 'http://192.168.1.7:3000';
+import { SERVER_URL } from '../config';
 import ModalPicker from '../components/ModalPicker';
 import ActionSheet from '../components/ActionSheet';
 import useResponsive from '../hooks/useResponsive';
@@ -243,8 +243,8 @@ export default function MenuScreen() {
             activeOpacity={isManager ? 0.7 : 1}
           >
             {item.image ? (
-              <TouchableOpacity onPress={() => { setViewerImageUri(API_URL + item.image); setShowImageViewer(true); }}>
-                <Image source={{ uri: API_URL + item.image }} style={styles.menuThumb} />
+              <TouchableOpacity onPress={() => { setViewerImageUri(SERVER_URL + item.image); setShowImageViewer(true); }}>
+                <Image source={{ uri: SERVER_URL + item.image }} style={styles.menuThumb} />
               </TouchableOpacity>
             ) : (
               <View style={styles.menuThumbPlaceholder}><Text style={styles.menuThumbPlaceholderText}>🍽</Text></View>

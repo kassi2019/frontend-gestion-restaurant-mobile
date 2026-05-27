@@ -367,7 +367,7 @@ export default function CommandesScreen() {
         />
       )}
 
-      {(isManager || isServeur) && (
+      {isManager && (
         <TouchableOpacity style={styles.fab} onPress={openCreateModal}>
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
