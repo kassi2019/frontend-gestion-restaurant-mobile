@@ -62,6 +62,8 @@ export default function DashboardScreen() {
   // Bar data
   const [barOrders, setBarOrders] = useState<any[]>([]);
   const [loadingBar, setLoadingBar] = useState(false);
+  const [barDetail, setBarDetail] = useState<'encours' | 'pretes' | null>(null);
+  const [showBarModal, setShowBarModal] = useState(false);
 
   const MODE_LABELS_CASHIER: Record<string, string> = {
     ESPECES: 'Especes', MOBILE_MONEY: 'Mobile Money', CARTE_BANCAIRE: 'Carte Bancaire',
@@ -527,29 +529,42 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Hero Bar */}
-        <View style={styles.barHero}>
+        {/* Hero Bar — cliquable */}
+        <TouchableOpacity style={styles.barHero} onPress={() => { setBarDetail('encours'); setShowBarModal(true); }} activeOpacity={0.8}>
           <Text style={styles.barHeroTitle}>🍹 Commandes Bar</Text>
           <Text style={styles.barHeroCount}>{boissonsEnAttente} en attente</Text>
-        </View>
+          <Text style={styles.barHeroSub}>Voir details →</Text>
+        </TouchableOpacity>
 
-        {/* Quick stats */}
+        {/* Quick stats — cliquables */}
         <View style={styles.barStatsRow}>
-          <View style={[styles.barStatCard, { backgroundColor: Colors.warning + '15', borderColor: Colors.warning + '40' }]}>
+          <TouchableOpacity
+            style={[styles.barStatCard, { backgroundColor: Colors.warning + '15', borderColor: Colors.warning + '40' }]}
+            onPress={() => { setBarDetail('encours'); setShowBarModal(true); }}
+            activeOpacity={0.7}
+          >
             <Text style={styles.barStatIcon}>⏳</Text>
             <Text style={styles.barStatValue}>{boissonsEnAttente}</Text>
             <Text style={styles.barStatLabel}>En cours</Text>
-          </View>
-          <View style={[styles.barStatCard, { backgroundColor: Colors.success + '15', borderColor: Colors.success + '40' }]}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.barStatCard, { backgroundColor: Colors.success + '15', borderColor: Colors.success + '40' }]}
+            onPress={() => { setBarDetail('pretes'); setShowBarModal(true); }}
+            activeOpacity={0.7}
+          >
             <Text style={styles.barStatIcon}>✅</Text>
             <Text style={styles.barStatValue}>{boissonsPretes}</Text>
             <Text style={styles.barStatLabel}>Pretes</Text>
-          </View>
-          <View style={[styles.barStatCard, { backgroundColor: Colors.info + '15', borderColor: Colors.info + '40' }]}>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.barStatCard, { backgroundColor: Colors.info + '15', borderColor: Colors.info + '40' }]}
+            onPress={() => navigation.navigate('Notifications')}
+            activeOpacity={0.7}
+          >
             <Text style={styles.barStatIcon}>🔔</Text>
             <Text style={styles.barStatValue}>{unreadNotifs}</Text>
             <Text style={styles.barStatLabel}>Non lues</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Liste des commandes bar par table */}
@@ -644,6 +659,84 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Bar Detail Modal */}
+        <Modal visible={showBarModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {barDetail === 'encours' ? `En cours (${barOrdersParTable.length} tables)` : `Pretes (${barOrdersParTable.length} tables)`}
+                </Text>
+                <TouchableOpacity onPress={() => setShowBarModal(false)} style={styles.modalClose}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {barOrdersParTable.length === 0 ? (
+                <View style={styles.emptyDetail}>
+                  <Text style={styles.emptyDetailIcon}>🍹</Text>
+                  <Text style={styles.emptyDetailText}>Aucune commande</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={barOrdersParTable}
+                  keyExtractor={(item) => String(item.tableId)}
+                  renderItem={({ item }) => {
+                    const isExpanded = expandedTables.has(item.tableId);
+                    return (
+                      <View style={styles.tableGroup}>
+                        <TouchableOpacity
+                          style={styles.tableHeader}
+                          onPress={() => toggleTable(item.tableId)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.tableHeaderLeft}>
+                            <Text style={styles.tableIcon}>🪑</Text>
+                            <View>
+                              <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
+                              <Text style={styles.tableCount}>
+                                {item.commandes.length} commande{item.commandes.length > 1 ? 's' : ''} · {formatPrixDevise(item.total, devise)}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+                        </TouchableOpacity>
+                        {isExpanded && (
+                          <View style={styles.tableDetails}>
+                            {item.commandes.map((cmd: any) => (
+                              <View key={cmd.id} style={styles.commandeItem}>
+                                <View style={styles.commandeHeader}>
+                                  <Text style={styles.commandeId}>#{cmd.id}</Text>
+                                  <Text style={styles.commandeMontant}>{formatPrixDevise(cmd.montantTotal, devise)}</Text>
+                                </View>
+                                {cmd.session?.dateArrivee && (
+                                  <Text style={styles.cashierInfo}>
+                                    🕐 Arrivee: {new Date(cmd.session.dateArrivee).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                  </Text>
+                                )}
+                                {cmd.serveur && (
+                                  <Text style={styles.cashierInfo}>👤 {cmd.serveur.nom}</Text>
+                                )}
+                                {cmd.details?.map((d: any, di: number) => (
+                                  <View key={di} style={styles.detailRow}>
+                                    <Text style={styles.detailQte}>{d.quantite}x</Text>
+                                    <Text style={styles.detailNom}>{d.menu?.nom || 'Article'}</Text>
+                                  </View>
+                                ))}
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  }}
+                  style={styles.detailList}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     );
   }
@@ -963,6 +1056,7 @@ const styles = StyleSheet.create({
   },
   barHeroTitle: { color: Colors.textWhite, fontSize: 15, fontWeight: '700', opacity: 0.9 },
   barHeroCount: { color: Colors.textWhite, fontSize: 32, fontWeight: '800', marginTop: 4 },
+  barHeroSub: { color: Colors.textWhite, fontSize: 12, opacity: 0.7, marginTop: 6 },
   barStatsRow: { flexDirection: 'row', paddingHorizontal: 12, marginTop: 8, gap: 8 },
   barStatCard: {
     flex: 1, borderRadius: 16, padding: 14, alignItems: 'center',

@@ -21,9 +21,17 @@ export function connectSocket() {
     }
   });
 
-  // Écoute des événements en temps réel
+  // Ecoute des evenements en temps reel
   socket.on('nouvelle_commande', (data: any) => {
     showToast.warning(`Nouvelle commande • Table ${data.table?.numero || '?'}`);
+  });
+
+  socket.on('nouvelle_commande_cuisine', (data: any) => {
+    showToast.warning(`🍳 Cuisine • Nouvelle commande Table ${data.table?.numero || '?'}`);
+  });
+
+  socket.on('nouvelle_commande_bar', (data: any) => {
+    showToast.warning(`🍹 Bar • Nouvelle commande Table ${data.table?.numero || '?'}`);
   });
 
   socket.on('commande_status_change', (data: any) => {
