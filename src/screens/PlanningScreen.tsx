@@ -35,8 +35,10 @@ export default function PlanningScreen() {
   const [showCreateDatePicker, setShowCreateDatePicker] = useState(false);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [createFilterRole, setCreateFilterRole] = useState('');
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
+  const [showFilterRole, setShowFilterRole] = useState(false);
+  const [showFilterAgent, setShowFilterAgent] = useState(false);
+  const [showCreateRole, setShowCreateRole] = useState(false);
+  const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [selectedPlanning, setSelectedPlanning] = useState<any>(null);
   const [serveurs, setServeurs] = useState<any[]>([]);
   const [form, setForm] = useState({ jour: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
@@ -229,53 +231,79 @@ export default function PlanningScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* Filtre rôle + agent (admin/manager) */}
+            {/* Filtres dropdown (admin/manager) */}
             {isManager && allServeurs.length > 0 && (
               <View style={styles.filterSection}>
-                {/* Rôles */}
-                <Text style={styles.filterSectionTitle}>Rôles</Text>
-                <View style={styles.filterChipRow}>
-                  <TouchableOpacity
-                    style={[styles.roleChip, filterRole === '' && styles.roleChipActive]}
-                    onPress={() => { setFilterRole(''); setFilterUserId(0); }}
-                  >
-                    <Text style={filterRole === '' ? styles.roleChipTextActive : styles.roleChipText}>Tous</Text>
+                <View style={styles.filterSelectRow}>
+                  {/* Sélecteur Rôle */}
+                  <TouchableOpacity style={styles.filterSelect} onPress={() => setShowFilterRole(!showFilterRole)}>
+                    <Text style={styles.filterSelectLabel}>Rôle</Text>
+                    <Text style={styles.filterSelectValue}>{filterRole ? ROLE_LABELS[filterRole] : 'Tous'}</Text>
+                    <Text style={styles.filterSelectArrow}>▼</Text>
                   </TouchableOpacity>
-                  {rolesDisponibles.map((role) => (
-                    <TouchableOpacity
-                      key={role}
-                      style={[styles.roleChip, filterRole === role && { backgroundColor: ROLE_COLORS[role] || Colors.primary, borderColor: ROLE_COLORS[role] || Colors.primary }]}
-                      onPress={() => { setFilterRole(filterRole === role ? '' : role); setFilterUserId(0); }}
-                    >
-                      <Text style={filterRole === role ? styles.roleChipTextActive : styles.roleChipText}>
-                        {ROLE_LABELS[role] || role}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+
+                  {/* Sélecteur Agent */}
+                  <TouchableOpacity style={styles.filterSelect} onPress={() => setShowFilterAgent(!showFilterAgent)}>
+                    <Text style={styles.filterSelectLabel}>Agent</Text>
+                    <Text style={styles.filterSelectValue}>
+                      {filterUserId > 0 ? allServeurs.find(a => a.id === filterUserId)?.nom || 'Agent' : 'Tous'}
+                    </Text>
+                    <Text style={styles.filterSelectArrow}>▼</Text>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Agents du rôle sélectionné */}
-                {filterRole !== '' && agentsFiltres.length > 0 && (
-                  <>
-                    <Text style={styles.filterSectionTitle}>Agents</Text>
-                    <View style={styles.filterChipRow}>
-                      <TouchableOpacity
-                        style={[styles.agentChip, filterUserId === 0 && styles.agentChipActive]}
-                        onPress={() => setFilterUserId(0)}
-                      >
-                        <Text style={filterUserId === 0 ? styles.agentChipTextActive : styles.agentChipText}>Tous</Text>
-                      </TouchableOpacity>
-                      {agentsFiltres.map((a) => (
+                {/* Modal Role */}
+                {showFilterRole && (
+                  <Modal transparent animationType="fade">
+                    <TouchableOpacity style={styles.dropdownOverlay} onPress={() => setShowFilterRole(false)} activeOpacity={1}>
+                      <View style={styles.dropdownList}>
                         <TouchableOpacity
-                          key={a.id}
-                          style={[styles.agentChip, filterUserId === a.id && styles.agentChipActive]}
-                          onPress={() => setFilterUserId(filterUserId === a.id ? 0 : a.id)}
+                          style={[styles.dropdownItem, filterRole === '' && styles.dropdownItemActive]}
+                          onPress={() => { setFilterRole(''); setFilterUserId(0); setShowFilterRole(false); }}
                         >
-                          <Text style={filterUserId === a.id ? styles.agentChipTextActive : styles.agentChipText}>{a.nom}</Text>
+                          <Text style={[styles.dropdownItemText, filterRole === '' && styles.dropdownItemTextActive]}>Tous les rôles</Text>
                         </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
+                        {rolesDisponibles.map((role) => (
+                          <TouchableOpacity
+                            key={role}
+                            style={[styles.dropdownItem, filterRole === role && styles.dropdownItemActive]}
+                            onPress={() => { setFilterRole(filterRole === role ? '' : role); setFilterUserId(0); setShowFilterRole(false); }}
+                          >
+                            <Text style={[styles.dropdownItemText, filterRole === role && styles.dropdownItemTextActive]}>
+                              {ROLE_LABELS[role] || role}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </TouchableOpacity>
+                  </Modal>
+                )}
+
+                {/* Modal Agent */}
+                {showFilterAgent && (
+                  <Modal transparent animationType="fade">
+                    <TouchableOpacity style={styles.dropdownOverlay} onPress={() => setShowFilterAgent(false)} activeOpacity={1}>
+                      <View style={styles.dropdownList}>
+                        <TouchableOpacity
+                          style={[styles.dropdownItem, filterUserId === 0 && styles.dropdownItemActive]}
+                          onPress={() => { setFilterUserId(0); setShowFilterAgent(false); }}
+                        >
+                          <Text style={[styles.dropdownItemText, filterUserId === 0 && styles.dropdownItemTextActive]}>Tous les agents</Text>
+                        </TouchableOpacity>
+                        {(filterRole ? agentsFiltres : allServeurs).map((a) => (
+                          <TouchableOpacity
+                            key={a.id}
+                            style={[styles.dropdownItem, filterUserId === a.id && styles.dropdownItemActive]}
+                            onPress={() => { setFilterUserId(filterUserId === a.id ? 0 : a.id); setShowFilterAgent(false); }}
+                          >
+                            <Text style={[styles.dropdownItemText, filterUserId === a.id && styles.dropdownItemTextActive]}>
+                              {a.nom} — {ROLE_LABELS[a.role] || a.role}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </TouchableOpacity>
+                  </Modal>
                 )}
               </View>
             )}
@@ -381,18 +409,18 @@ export default function PlanningScreen() {
                   <Text style={styles.fieldLabel}>Rôle</Text>
                   <TouchableOpacity
                     style={styles.selectField}
-                    onPress={() => { setShowRoleDropdown(!showRoleDropdown); setShowAgentDropdown(false); }}
+                    onPress={() => { setShowCreateRole(!showCreateRole); setShowCreateAgent(false); }}
                   >
                     <Text style={createFilterRole ? styles.selectFieldText : styles.selectFieldPlaceholder}>
                       {createFilterRole ? ROLE_LABELS[createFilterRole] || createFilterRole : 'Sélectionnez un rôle'}
                     </Text>
-                    <Text style={styles.selectArrow}>{showRoleDropdown ? '▲' : '▼'}</Text>
+                    <Text style={styles.selectArrow}>{showCreateRole ? '▲' : '▼'}</Text>
                   </TouchableOpacity>
-                  {showRoleDropdown && (
+                  {showCreateRole && (
                     <View style={styles.dropdownList}>
                       <TouchableOpacity
                         style={[styles.dropdownItem, createFilterRole === '' && styles.dropdownItemSelected]}
-                        onPress={() => { setCreateFilterRole(''); setForm({ ...form, utilisateurId: 0 }); setShowRoleDropdown(false); }}
+                        onPress={() => { setCreateFilterRole(''); setForm({ ...form, utilisateurId: 0 }); setShowCreateRole(false); }}
                       >
                         <Text style={createFilterRole === '' ? styles.dropdownItemTextSelected : styles.dropdownItemText}>Tous</Text>
                       </TouchableOpacity>
@@ -400,7 +428,7 @@ export default function PlanningScreen() {
                         <TouchableOpacity
                           key={role}
                           style={[styles.dropdownItem, createFilterRole === role && styles.dropdownItemSelected]}
-                          onPress={() => { setCreateFilterRole(role); setForm({ ...form, utilisateurId: 0 }); setShowRoleDropdown(false); }}
+                          onPress={() => { setCreateFilterRole(role); setForm({ ...form, utilisateurId: 0 }); setShowCreateRole(false); }}
                         >
                           <Text style={createFilterRole === role ? styles.dropdownItemTextSelected : styles.dropdownItemText}>
                             {ROLE_LABELS[role] || role}
@@ -414,21 +442,21 @@ export default function PlanningScreen() {
                   <Text style={styles.fieldLabel}>Agent</Text>
                   <TouchableOpacity
                     style={styles.selectField}
-                    onPress={() => { setShowAgentDropdown(!showAgentDropdown); setShowRoleDropdown(false); }}
+                    onPress={() => { setShowCreateAgent(!showCreateAgent); setShowCreateRole(false); }}
                   >
                     <Text style={form.utilisateurId ? styles.selectFieldText : styles.selectFieldPlaceholder}>
                       {form.utilisateurId ? (serveurs.find(s => s.id === form.utilisateurId)?.nom || 'Sélectionné') : 'Sélectionnez un agent'}
                     </Text>
-                    <Text style={styles.selectArrow}>{showAgentDropdown ? '▲' : '▼'}</Text>
+                    <Text style={styles.selectArrow}>{showCreateAgent ? '▲' : '▼'}</Text>
                   </TouchableOpacity>
-                  {showAgentDropdown && (
+                  {showCreateAgent && (
                     <View style={styles.dropdownList}>
                       <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
                         {agentsCreateFiltres.map((a) => (
                           <TouchableOpacity
                             key={a.id}
                             style={[styles.dropdownItem, form.utilisateurId === a.id && styles.dropdownItemSelected]}
-                            onPress={() => { setForm({ ...form, utilisateurId: a.id }); setShowAgentDropdown(false); }}
+                            onPress={() => { setForm({ ...form, utilisateurId: a.id }); setShowCreateAgent(false); }}
                           >
                             <Text style={form.utilisateurId === a.id ? styles.dropdownItemTextSelected : styles.dropdownItemText}>{a.nom}</Text>
                           </TouchableOpacity>
@@ -572,6 +600,28 @@ const styles = StyleSheet.create({
   filterDateIcon: { fontSize: 16, marginRight: 10 },
   filterDateText: { fontSize: 15, fontWeight: '600', color: Colors.text, textTransform: 'capitalize', flex: 1 },
   filterSection: { marginTop: 10 },
+  filterSelectRow: { flexDirection: 'row', gap: 8 },
+  filterSelect: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.surface, borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  filterSelectLabel: { fontSize: 10, color: Colors.textLight, marginRight: 6 },
+  filterSelectValue: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.text },
+  filterSelectArrow: { fontSize: 10, color: Colors.textLight },
+  dropdownOverlay: {
+    flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center',
+    paddingHorizontal: 30,
+  },
+  dropdownList: {
+    backgroundColor: Colors.surface, borderRadius: 16, padding: 8,
+    maxHeight: 300,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 10,
+  },
+  dropdownItem: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10 },
+  dropdownItemActive: { backgroundColor: Colors.primary + '15' },
+  dropdownItemText: { fontSize: 14, color: Colors.text, fontWeight: '500' },
+  dropdownItemTextActive: { color: Colors.primary, fontWeight: '700' },
   filterSectionTitle: { fontSize: 12, fontWeight: '600', color: Colors.textLight, marginBottom: 6 },
   filterChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   roleChip: {

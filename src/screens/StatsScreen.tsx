@@ -16,6 +16,7 @@ export default function StatsScreen() {
   const [platsPop, setPlatsPop] = useState<any[]>([]);
   const [serveurs, setServeurs] = useState<any[]>([]);
   const [affluence, setAffluence] = useState<any[]>([]);
+  const [caissiers, setCaissiers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -44,16 +45,18 @@ export default function StatsScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [dashRes, platsRes, servRes, affRes] = await Promise.all([
+      const [dashRes, platsRes, servRes, affRes, caissRes] = await Promise.all([
         statistiquesApi.getDashboard(dateDebut, dateFin),
         statistiquesApi.getPlatsPopulaires(10, dateDebut, dateFin),
         statistiquesApi.getPerformanceServeurs(dateDebut, dateFin),
         statistiquesApi.getAffluence(dateDebut, dateFin),
+        statistiquesApi.getPerformanceCaissiers(dateDebut, dateFin),
       ]);
       setDashboard(dashRes.data);
       setPlatsPop(Array.isArray(platsRes.data) ? platsRes.data : []);
       setServeurs(Array.isArray(servRes.data) ? servRes.data : []);
       setAffluence(Array.isArray(affRes.data) ? affRes.data : []);
+      setCaissiers(Array.isArray(caissRes.data) ? caissRes.data : []);
     } catch (err) {
       showToast.error('Erreur de chargement');
     } finally { setLoading(false); }
@@ -147,6 +150,32 @@ export default function StatsScreen() {
               <View style={styles.serveurStats}>
                 <Text style={styles.serveurCmd}>{s.commandes} cmd</Text>
                 <Text style={styles.serveurCA}>{formatPrixDevise(s.chiffreAffaires, devise, 0)}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* Section: Performance Caissiers */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>💰 Performance Caissiers</Text>
+        {caissiers.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune donnée</Text>
+        ) : caissiers.map((c, i) => {
+          const max = Math.max(...caissiers.map((x: any) => x.chiffreAffaires || 0), 1);
+          const pct = Math.round((c.chiffreAffaires / max) * 100);
+          return (
+            <View key={i} style={styles.serveurRow}>
+              <View style={styles.serveurInfo}>
+                <Text style={styles.serveurRank}>#{i + 1}</Text>
+                <Text style={styles.serveurName}>{c.nom}</Text>
+              </View>
+              <View style={styles.serveurBarTrack}>
+                <View style={[styles.serveurBarFill, { width: `${pct}%` }]} />
+              </View>
+              <View style={styles.serveurStats}>
+                <Text style={styles.serveurCmd}>{c.factures} factures</Text>
+                <Text style={styles.serveurCA}>{formatPrixDevise(c.chiffreAffaires, devise, 0)}</Text>
               </View>
             </View>
           );

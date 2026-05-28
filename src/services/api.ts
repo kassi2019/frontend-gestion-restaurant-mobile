@@ -143,6 +143,11 @@ export const paiementApi = {
   },
   getCaisseJour: () => api.get('/paiements/caisse/jour'),
   cloturerCaisse: () => api.post('/paiements/caisse/cloture'),
+  cloturerCaisseGlobale: (dateReouverture: string) =>
+    api.post('/paiements/caisse/cloture-globale', { dateReouverture }),
+  getHistoriqueClotures: (date?: string) =>
+    api.get('/paiements/caisse/clotures', { params: date ? { date } : {} }),
+  getStatutRestaurant: (id: number) => api.get(`/paiements/caisse/statut-restaurant/${id}`),
 };
 
 export const statistiquesApi = {
@@ -156,6 +161,8 @@ export const statistiquesApi = {
     api.get('/statistiques/performance-serveurs', { params: { debut, fin } }),
   getAffluence: (debut?: string, fin?: string) =>
     api.get('/statistiques/affluence', { params: { debut, fin } }),
+  getPerformanceCaissiers: (debut?: string, fin?: string) =>
+    api.get('/statistiques/performance-caissiers', { params: { debut, fin } }),
 };
 
 export const restaurantApi = {

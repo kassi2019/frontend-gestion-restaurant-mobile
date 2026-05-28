@@ -7,23 +7,42 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { updateUser } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
-import { restaurantApi } from '../services/api';
+import { restaurantApi, paiementApi } from '../services/api';
 import { showToast } from '../services/toast';
+import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
+
+const MENUS = [
+  { key: 'infos',   icon: '🏪', label: 'Informations du restaurant' },
+  { key: 'cloture', icon: '🔒', label: 'Clôture Globale' },
+];
 
 export default function RestaurantSettingsScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const dispatch = useDispatch<AppDispatch>();
+  const isAdmin = user?.role === 'ADMIN';
 
+  // Menu actif
+  const [activeMenu, setActiveMenu] = useState('infos');
+
+  // Infos restaurant
   const [nom, setNom] = useState('');
   const [adresse, setAdresse] = useState('');
   const [telephone, setTelephone] = useState('');
   const [devise, setDevise] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Clôture globale
+  const [statutResto, setStatutResto] = useState<string>('OUVERT');
+  const [dateReouverture, setDateReouverture] = useState(toDateStr(new Date()));
+  const [heureReouverture, setHeureReouverture] = useState('08:00');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [clotureLoading, setClotureLoading] = useState(false);
 
   useEffect(() => {
     if (user?.restaurantId) {
@@ -31,7 +50,13 @@ export default function RestaurantSettingsScreen() {
         setNom(data.nom || '');
         setAdresse(data.adresse || '');
         setTelephone(data.telephone || '');
-        setDevise(data.devise || '€');
+        setDevise(data.devise || '');
+        setStatutResto(data.statut || 'OUVERT');
+        if (data.dateReouverture) {
+          const d = new Date(data.dateReouverture);
+          setDateReouverture(toDateStr(d));
+          setHeureReouverture(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+        }
       }).catch(() => showToast.error('Impossible de charger les infos du restaurant'));
     }
   }, [user?.restaurantId]);
@@ -63,91 +88,223 @@ export default function RestaurantSettingsScreen() {
     }
   };
 
+  const handleClotureGlobale = () => {
+    if (!dateReouverture || !heureReouverture) {
+      showToast.error('Veuillez saisir une date et heure de réouverture');
+      return;
+    }
+    const dateReouv = `${dateReouverture}T${heureReouverture}:00`;
+    // Vérifier que la date est valide
+    if (isNaN(new Date(dateReouv).getTime())) {
+      showToast.error('Date de réouverture invalide');
+      return;
+    }
+    Alert.alert(
+      'Fermer le restaurant',
+      `Le restaurant sera fermé jusqu'au ${formatDisplay(dateReouverture)} à ${heureReouverture}.\n\nLes clients ne pourront plus commander.\n\nConfirmer ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Fermer le restaurant',
+          style: 'destructive',
+          onPress: async () => {
+            setClotureLoading(true);
+            try {
+              await paiementApi.cloturerCaisseGlobale(dateReouv);
+              setStatutResto('FERME');
+              showToast.success('Restaurant fermé. Réouverture le ' + formatDisplay(dateReouverture) + ' à ' + heureReouverture);
+            } catch (err: any) {
+              showToast.error(err.response?.data?.message || 'Erreur lors de la fermeture');
+            } finally {
+              setClotureLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReouverture = () => {
+    Alert.alert(
+      'Réouvrir le restaurant',
+      'Le restaurant sera réouvert immédiatement.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Réouvrir',
+          onPress: async () => {
+            try {
+              await restaurantApi.update(user!.restaurantId, { statut: 'OUVERT' } as any);
+              setStatutResto('OUVERT');
+              showToast.success('Restaurant réouvert');
+            } catch (err: any) {
+              showToast.error('Erreur lors de la réouverture');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Informations du restaurant</Text>
-
-        <Text style={styles.label}>Nom</Text>
-        <TextInput
-          style={styles.input}
-          value={nom}
-          onChangeText={setNom}
-          placeholder="Nom du restaurant"
-          placeholderTextColor={Colors.textLight}
-        />
-
-        <Text style={styles.label}>Adresse</Text>
-        <TextInput
-          style={[styles.input, styles.textarea]}
-          value={adresse}
-          onChangeText={setAdresse}
-          placeholder="Adresse"
-          placeholderTextColor={Colors.textLight}
-          multiline
-          numberOfLines={3}
-        />
-
-        <Text style={styles.label}>Téléphone</Text>
-        <TextInput
-          style={styles.input}
-          value={telephone}
-          onChangeText={setTelephone}
-          placeholder="Ex: +243990000000"
-          placeholderTextColor={Colors.textLight}
-          keyboardType="phone-pad"
-        />
-
-        <Text style={styles.label}>Devise</Text>
-        <TextInput
-          style={styles.input}
-          value={devise}
-          onChangeText={setDevise}
-          placeholder="Ex: €, FC, $"
-          placeholderTextColor={Colors.textLight}
-          maxLength={10}
-        />
-
-        <TouchableOpacity
-          style={[styles.saveBtn, loading && { opacity: 0.6 }]}
-          onPress={handleSave}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={Colors.textWhite} />
-          ) : (
-            <Text style={styles.saveBtnText}>Enregistrer les modifications</Text>
-          )}
-        </TouchableOpacity>
+    <View style={styles.container}>
+      {/* Menu latéral ou en haut */}
+      <View style={styles.menuBar}>
+        {MENUS.map((m) => (
+          <TouchableOpacity
+            key={m.key}
+            style={[styles.menuItem, activeMenu === m.key && styles.menuItemActive]}
+            onPress={() => setActiveMenu(m.key)}
+          >
+            <Text style={styles.menuIcon}>{m.icon}</Text>
+            <Text style={[styles.menuLabel, activeMenu === m.key && styles.menuLabelActive]}>
+              {m.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
-    </ScrollView>
+
+      {/* Contenu du menu actif */}
+      <ScrollView style={styles.content}>
+        {/* ========== INFORMATIONS RESTAURANT ========== */}
+        {activeMenu === 'infos' && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>🏪 Informations du restaurant</Text>
+
+            <Text style={styles.label}>Nom</Text>
+            <TextInput style={styles.input} value={nom} onChangeText={setNom} placeholder="Nom du restaurant" placeholderTextColor={Colors.textLight} />
+
+            <Text style={styles.label}>Adresse</Text>
+            <TextInput style={[styles.input, styles.textarea]} value={adresse} onChangeText={setAdresse} placeholder="Adresse" placeholderTextColor={Colors.textLight} multiline numberOfLines={3} />
+
+            <Text style={styles.label}>Téléphone</Text>
+            <TextInput style={styles.input} value={telephone} onChangeText={setTelephone} placeholder="Ex: +243990000000" placeholderTextColor={Colors.textLight} keyboardType="phone-pad" />
+
+            <Text style={styles.label}>Devise (€, FC, $)</Text>
+            <TextInput style={styles.input} value={devise} onChangeText={setDevise} placeholder="Ex: €, FC, $" placeholderTextColor={Colors.textLight} maxLength={10} />
+
+            <TouchableOpacity style={[styles.saveBtn, loading && { opacity: 0.6 }]} onPress={handleSave} disabled={loading}>
+              {loading ? <ActivityIndicator color={Colors.textWhite} /> : <Text style={styles.saveBtnText}>Enregistrer les modifications</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ========== CLÔTURE GLOBALE ========== */}
+        {activeMenu === 'cloture' && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>🔒 Clôture Globale</Text>
+
+            {!isAdmin ? (
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>🔐 Réservé à l'administrateur</Text>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.statusBadge, { backgroundColor: statutResto === 'FERME' ? Colors.danger + '15' : Colors.success + '15' }]}>
+                  <Text style={[styles.statusText, { color: statutResto === 'FERME' ? Colors.danger : Colors.success }]}>
+                    {statutResto === 'FERME' ? '🔴 Restaurant FERMÉ' : '🟢 Restaurant OUVERT'}
+                  </Text>
+                </View>
+
+                {statutResto === 'FERME' ? (
+                  <TouchableOpacity style={[styles.saveBtn, { backgroundColor: Colors.success }]} onPress={handleReouverture}>
+                    <Text style={styles.saveBtnText}>🟢 Réouvrir le restaurant maintenant</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <>
+                    <Text style={styles.infoBoxText}>
+                      La clôture globale ferme le restaurant. Plus aucune commande ne pourra être passée jusqu'à la date de réouverture.
+                    </Text>
+
+                    <Text style={styles.label}>Date de réouverture</Text>
+                    <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
+                      <Text style={styles.dateBtnText}>📅 {formatDisplay(dateReouverture)}</Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.label}>Heure de réouverture</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={heureReouverture}
+                      onChangeText={setHeureReouverture}
+                      placeholder="08:00"
+                      placeholderTextColor={Colors.textLight}
+                      keyboardType="numbers-and-punctuation"
+                    />
+
+                    <TouchableOpacity
+                      style={[styles.saveBtn, { backgroundColor: Colors.danger }, clotureLoading && { opacity: 0.6 }]}
+                      onPress={handleClotureGlobale}
+                      disabled={clotureLoading}
+                    >
+                      {clotureLoading ? (
+                        <ActivityIndicator color={Colors.textWhite} />
+                      ) : (
+                        <Text style={styles.saveBtnText}>🔒 Fermer le restaurant</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <CalendarPicker visible={showDatePicker} value={dateReouverture} onSelect={(d) => { setDateReouverture(d); setShowDatePicker(false); }} onClose={() => setShowDatePicker(false)} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: 16, paddingBottom: 40 },
+  // Menu bar
+  menuBar: {
+    flexDirection: 'row', backgroundColor: Colors.surface,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    gap: 8,
+  },
+  menuItem: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 12, borderRadius: 14,
+    backgroundColor: Colors.inputBg, gap: 6,
+  },
+  menuItemActive: { backgroundColor: Colors.primary },
+  menuIcon: { fontSize: 16 },
+  menuLabel: { fontSize: 12, fontWeight: '600', color: Colors.textLight },
+  menuLabelActive: { color: Colors.textWhite },
+  // Content
+  content: { flex: 1, padding: 16 },
   card: { backgroundColor: Colors.surface, borderRadius: 16, padding: 16 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.text, marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '600', color: Colors.text, marginBottom: 6, marginTop: 12 },
   input: {
-    backgroundColor: Colors.inputBg,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 46,
-    fontSize: 15,
-    color: Colors.text,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46,
+    fontSize: 15, color: Colors.text, borderWidth: 1, borderColor: Colors.border,
   },
   textarea: { height: 80, paddingTop: 12, textAlignVertical: 'top' },
   saveBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
+    backgroundColor: Colors.primary, borderRadius: 14, height: 48,
+    justifyContent: 'center', alignItems: 'center', marginTop: 24,
   },
   saveBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
+  // Clôture
+  statusBadge: { borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 16 },
+  statusText: { fontSize: 16, fontWeight: '800' },
+  dateBtn: {
+    backgroundColor: Colors.inputBg, borderRadius: 12, paddingHorizontal: 14, height: 46,
+    justifyContent: 'center', borderWidth: 1, borderColor: Colors.border,
+  },
+  dateBtnText: { fontSize: 15, color: Colors.text, fontWeight: '600' },
+  infoBox: {
+    backgroundColor: Colors.warning + '15', borderRadius: 12, padding: 16,
+    borderWidth: 1, borderColor: Colors.warning + '30', marginBottom: 16,
+  },
+  infoBoxText: {
+    fontSize: 13, color: Colors.textLight, lineHeight: 18, marginBottom: 16,
+    backgroundColor: Colors.inputBg, borderRadius: 10, padding: 12,
+  },
+  infoText: { fontSize: 14, color: Colors.warning, fontWeight: '600', textAlign: 'center' },
 });
