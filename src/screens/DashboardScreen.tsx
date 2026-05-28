@@ -656,12 +656,12 @@ export default function DashboardScreen() {
             const isExpanded = expandedTables.has(item.tableId);
             return (
               <View key={item.tableId} style={[styles.tableGroup, { marginHorizontal: 12, marginBottom: 8 }]}>
-                <TouchableOpacity
-                  style={styles.tableHeader}
-                  onPress={() => toggleTable(item.tableId)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.tableHeaderLeft}>
+                <View style={styles.tableHeader}>
+                  <TouchableOpacity
+                    style={styles.tableHeaderLeft}
+                    onPress={() => toggleTable(item.tableId)}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.tableIcon}>🪑</Text>
                     <View>
                       <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
@@ -669,23 +669,22 @@ export default function DashboardScreen() {
                         {item.commandes.length} commande{item.commandes.length > 1 ? 's' : ''} · {formatPrixDevise(item.total, devise)}
                       </Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.toutPretBtn}
-                    onPress={async () => {
-                      try {
-                        await commandesApi.toutPret(item.tableId, 'BAR');
+                    onPress={() => {
+                      commandesApi.toutPret(item.tableId, 'BAR').then(() => {
                         showToast.success('Toutes les boissons marquées prêtes');
                         loadBarData();
-                      } catch (err) {
-                        showToast.error('Impossible de mettre à jour');
-                      }
+                      }).catch(() => showToast.error('Impossible de mettre à jour'));
                     }}
                   >
                     <Text style={styles.toutPretText}>✅ Tout prêt</Text>
                   </TouchableOpacity>
-                  <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity onPress={() => toggleTable(item.tableId)} activeOpacity={0.7}>
+                    <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                </View>
                 {isExpanded && (
                   <View style={styles.tableDetails}>
                     {item.commandes.map((cmd: any) => (
@@ -775,12 +774,12 @@ export default function DashboardScreen() {
                     const isExpanded = expandedTables.has(item.tableId);
                     return (
                       <View style={styles.tableGroup}>
-                        <TouchableOpacity
-                          style={styles.tableHeader}
-                          onPress={() => toggleTable(item.tableId)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={styles.tableHeaderLeft}>
+                        <View style={styles.tableHeader}>
+                          <TouchableOpacity
+                            style={styles.tableHeaderLeft}
+                            onPress={() => toggleTable(item.tableId)}
+                            activeOpacity={0.7}
+                          >
                             <Text style={styles.tableIcon}>🪑</Text>
                             <View>
                               <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
@@ -788,23 +787,22 @@ export default function DashboardScreen() {
                                 {item.commandes.length} commande{item.commandes.length > 1 ? 's' : ''} · {formatPrixDevise(item.total, devise)}
                               </Text>
                             </View>
-                          </View>
+                          </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.toutPretBtn}
-                            onPress={async () => {
-                              try {
-                                await commandesApi.toutPret(item.tableId, 'BAR');
+                            onPress={() => {
+                              commandesApi.toutPret(item.tableId, 'BAR').then(() => {
                                 showToast.success('Toutes les boissons marquées prêtes');
                                 loadBarData();
-                              } catch (err) {
-                                showToast.error('Impossible de mettre à jour');
-                              }
+                              }).catch(() => showToast.error('Impossible de mettre à jour'));
                             }}
                           >
                             <Text style={styles.toutPretText}>✅ Tout prêt</Text>
                           </TouchableOpacity>
-                          <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
-                        </TouchableOpacity>
+                          <TouchableOpacity onPress={() => toggleTable(item.tableId)} activeOpacity={0.7}>
+                            <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+                          </TouchableOpacity>
+                        </View>
                         {isExpanded && (
                           <View style={styles.tableDetails}>
                             {item.commandes.map((cmd: any) => (
@@ -954,12 +952,12 @@ export default function DashboardScreen() {
             const waitInfo = getWaitColor(item.passeeDepuis);
             return (
               <View key={item.tableId} style={[styles.cuisineTableGroup, { borderLeftColor: waitInfo.accent }]}>
-                <TouchableOpacity
-                  style={styles.cuisineTableHeader}
-                  onPress={() => toggleTable(item.tableId)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.tableHeaderLeft}>
+                <View style={styles.cuisineTableHeader}>
+                  <TouchableOpacity
+                    style={styles.tableHeaderLeft}
+                    onPress={() => toggleTable(item.tableId)}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.tableIcon}>🪑</Text>
                     <View>
                       <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
@@ -967,26 +965,23 @@ export default function DashboardScreen() {
                         ⏱ {item.passeeDepuis} min d'attente
                       </Text>
                     </View>
-                  </View>
-                  <View style={styles.tableGroupRight}>
-                    <TouchableOpacity
-                      style={styles.toutPretBtn}
-                      onPress={async () => {
-                        try {
-                          await commandesApi.toutPret(item.tableId, 'CUISINE');
-                          showToast.success('Tous les articles cuisine marqués prêts');
-                          loadCuisineData();
-                        } catch (err) {
-                          showToast.error('Impossible de mettre à jour');
-                        }
-                      }}
-                    >
-                      <Text style={styles.toutPretText}>✅ Tout prêt</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.tableGroupTotal}>{formatPrixDevise(item.total, devise)}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.toutPretBtn}
+                    onPress={() => {
+                      commandesApi.toutPret(item.tableId, 'CUISINE').then(() => {
+                        showToast.success('Tous les articles cuisine marqués prêts');
+                        loadCuisineData();
+                      }).catch(() => showToast.error('Impossible de mettre à jour'));
+                    }}
+                  >
+                    <Text style={styles.toutPretText}>✅ Tout prêt</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.tableGroupTotal}>{formatPrixDevise(item.total, devise)}</Text>
+                  <TouchableOpacity onPress={() => toggleTable(item.tableId)} activeOpacity={0.7}>
                     <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </View>
 
                 {isExpanded && (
                   <View style={styles.cuisineTableDetails}>

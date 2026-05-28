@@ -1,20 +1,33 @@
 import { Audio } from 'expo-av';
+import { Vibration, Platform } from 'react-native';
 
 let sound: Audio.Sound | null = null;
 
-export async function playNotificationSound() {
+// Vibreur court (200ms) — intégré, pas de dépendance supplémentaire
+export function vibrate() {
   try {
-    // Charger le son une seule fois
+    if (Platform.OS === 'android') {
+      Vibration.vibrate(200);
+    } else {
+      // iOS: pattern [attente, vibration, attente, vibration]
+      Vibration.vibrate([0, 200]);
+    }
+  } catch (e) {
+    // Silencieux si le vibreur échoue
+  }
+}
+
+export async function playNotificationSound() {
+  vibrate();
+  try {
     if (!sound) {
       const { sound: s } = await Audio.Sound.createAsync(
-        // Son de notification intégré (bip court)
-        require('./notification.wav'),
-        { shouldPlay: false, volume: 0.5 }
+        require('./notification2.wav'),
+        { shouldPlay: false, volume: 0.9 }
       );
       sound = s;
     }
 
-    // Rejouer depuis le début
     if (sound) {
       await sound.setPositionAsync(0);
       await sound.playAsync();
@@ -24,7 +37,6 @@ export async function playNotificationSound() {
   }
 }
 
-// Configurer l'audio pour les notifications
 export async function setupAudio() {
   try {
     await Audio.setAudioModeAsync({
