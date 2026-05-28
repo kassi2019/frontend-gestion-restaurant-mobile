@@ -1,3 +1,4 @@
+import { playNotificationSound } from './sound';
 import { io, Socket } from 'socket.io-client';
 import { store } from '../store';
 import { showToast } from './toast';
@@ -23,28 +24,32 @@ export function connectSocket() {
 
   // Ecoute des evenements en temps reel
   socket.on('nouvelle_commande', (data: any) => {
-    showToast.warning(`Nouvelle commande • Table ${data.table?.numero || '?'}`);
+    playNotificationSound(); showToast.warning(`Nouvelle commande • Table ${data.table?.numero || '?'}`);
   });
 
   socket.on('nouvelle_commande_cuisine', (data: any) => {
-    showToast.warning(`🍳 Cuisine • Nouvelle commande Table ${data.table?.numero || '?'}`);
+    playNotificationSound(); showToast.warning(`🍳 Cuisine • Nouvelle commande Table ${data.table?.numero || '?'}`);
   });
 
   socket.on('nouvelle_commande_bar', (data: any) => {
-    showToast.warning(`🍹 Bar • Nouvelle commande Table ${data.table?.numero || '?'}`);
+    playNotificationSound(); showToast.warning(`🍹 Bar • Nouvelle commande Table ${data.table?.numero || '?'}`);
   });
 
   socket.on('commande_status_change', (data: any) => {
     const label = data.label || data.statut;
-    showToast.success(`Table ${data.tableNumero} → ${label}`);
+    playNotificationSound(); showToast.success(`Table ${data.tableNumero} → ${label}`);
   });
 
   socket.on('notification_admin', (data: any) => {
-    showToast.warning(data.message || 'Notification admin');
+    playNotificationSound(); showToast.warning(data.message || 'Notification admin');
+  });
+
+  socket.on('demande_facture', (data: any) => {
+    playNotificationSound(); showToast.warning(`🧾 Demande d'addition — Table ${data.tableNumero || '?'}`);
   });
 
   socket.on('notification_user', (data: any) => {
-    showToast.warning(data.message || 'Notification');
+    playNotificationSound(); showToast.warning(data.message || 'Notification');
   });
 
   socket.on('connect_error', () => {

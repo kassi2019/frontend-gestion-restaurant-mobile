@@ -9,6 +9,8 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  Linking,
+  Alert,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -18,6 +20,27 @@ import { Colors } from '../theme/colors';
 import StatCard from '../components/StatCard';
 import { commandesApi, notificationsApi, paiementApi } from '../services/api';
 import { getSocket } from '../services/socket';
+import { showToast } from '../services/toast';
+
+const STATUT_COLORS: Record<string, string> = {
+  EN_ATTENTE: '#FF9800',
+  VALIDEE: '#2196F3',
+  EN_PREPARATION: '#E86B2A',
+  PRETE: '#4CAF50',
+  SERVIE: '#9C27B0',
+  PAYEE: '#607D8B',
+  ANNULEE: '#f44336',
+};
+
+const STATUT_LABELS: Record<string, string> = {
+  EN_ATTENTE: 'En attente',
+  VALIDEE: 'Validée',
+  EN_PREPARATION: 'En préparation',
+  PRETE: 'Prête',
+  SERVIE: 'Servie',
+  PAYEE: 'Payée',
+  ANNULEE: 'Annulée',
+};
 
 const STATUT_MAP: Record<string, string> = {
   'En attente': 'EN_ATTENTE',
@@ -26,6 +49,12 @@ const STATUT_MAP: Record<string, string> = {
   'Pretes': 'PRETE',
   'Servies': 'SERVIE',
 };
+
+// Calculer le total des articles (details) d'une commande
+function totalDetails(cmd: any) {
+  if (!cmd.details) return 0;
+  return cmd.details.reduce((sum: number, d: any) => sum + Number(d.prix) * d.quantite, 0);
+}
 
 export default function DashboardScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -65,14 +94,23 @@ export default function DashboardScreen() {
   const [barDetail, setBarDetail] = useState<'encours' | 'pretes' | null>(null);
   const [showBarModal, setShowBarModal] = useState(false);
 
+  // Cuisine data
+  const [cuisineOrders, setCuisineOrders] = useState<any[]>([]);
+  const [loadingCuisine, setLoadingCuisine] = useState(false);
+
   const MODE_LABELS_CASHIER: Record<string, string> = {
     ESPECES: 'Especes', MOBILE_MONEY: 'Mobile Money', CARTE_BANCAIRE: 'Carte Bancaire',
   };
 
   const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isServeur = user?.role === 'SERVEUR';
   const isCuisine = user?.role === 'CUISINE';
   const isBar = user?.role === 'BAR';
   const isCaissier = user?.role === 'CAISSIER';
+  const canValidate = isServeur || isAdminOrManager;
+  const canPrepare = isCuisine || isBar || isAdminOrManager;
+  const canMarkReady = isAdminOrManager;
+  const canMarkServed = isServeur || isAdminOrManager;
 
   const loadStats = useCallback(async () => {
     if (isCaissier) return;
@@ -101,6 +139,16 @@ export default function DashboardScreen() {
     finally { setLoadingBar(false); }
   }, [isBar]);
 
+  const loadCuisineData = useCallback(async () => {
+    if (!isCuisine) return;
+    try {
+      setLoadingCuisine(true);
+      const { data } = await commandesApi.getByCuisine();
+      setCuisineOrders(Array.isArray(data) ? data : []);
+    } catch (err) { setCuisineOrders([]); }
+    finally { setLoadingCuisine(false); }
+  }, [isCuisine]);
+
   const loadCashierData = useCallback(async () => {
     if (!isCaissier) return;
     try {
@@ -120,7 +168,8 @@ export default function DashboardScreen() {
       loadStats();
       loadCashierData();
       loadBarData();
-    }, [loadUnreadNotifs, loadStats, loadCashierData, loadBarData])
+      loadCuisineData();
+    }, [loadUnreadNotifs, loadStats, loadCashierData, loadBarData, loadCuisineData])
   );
 
   useEffect(() => {
@@ -128,15 +177,17 @@ export default function DashboardScreen() {
     loadUnreadNotifs();
     loadCashierData();
     loadBarData();
+    loadCuisineData();
     const socket = getSocket();
     if (socket) {
-      const refresh = () => { loadStats(); loadUnreadNotifs(); loadCashierData(); loadBarData(); };
+      const refresh = () => { loadStats(); loadUnreadNotifs(); loadCashierData(); loadBarData(); loadCuisineData(); };
       socket.on('nouvelle_commande', refresh);
       socket.on('commande_status_change', refresh);
       if (isCuisine) socket.on('nouvelle_commande_cuisine', refresh);
       if (isBar) socket.on('nouvelle_commande_bar', refresh);
       socket.on('notification_admin', refresh);
       socket.on('notification_user', refresh);
+      socket.on('demande_facture', refresh);
       return () => {
         socket.off('nouvelle_commande', refresh);
         socket.off('commande_status_change', refresh);
@@ -144,14 +195,28 @@ export default function DashboardScreen() {
         if (isBar) socket.off('nouvelle_commande_bar', refresh);
         socket.off('notification_admin', refresh);
         socket.off('notification_user', refresh);
+        socket.off('demande_facture', refresh);
       };
     }
   }, [isCuisine, isBar, isCaissier]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadStats(), loadUnreadNotifs(), loadCashierData()]);
+    await Promise.all([loadStats(), loadUnreadNotifs(), loadCashierData(), loadBarData(), loadCuisineData()]);
     setRefreshing(false);
+  };
+
+  const handleUpdateStatut = async (commandeId: number, statut: string) => {
+    try {
+      await commandesApi.updateStatut(commandeId, statut);
+      showToast.success(`Commande #${commandeId} → ${STATUT_LABELS[statut] || statut}`);
+      loadStats();
+      loadCashierData();
+      // Rafraîchir les détails si la modale est ouverte
+      if (showDetail) openDetail(detailTitre);
+    } catch (err) {
+      showToast.error('Impossible de mettre à jour le statut');
+    }
   };
 
   const openDetail = async (titre: string) => {
@@ -206,6 +271,36 @@ export default function DashboardScreen() {
     return Object.values(grouped);
   }, [detailCommandes]);
 
+  const commandesAPayerGroup = useMemo(() => {
+    const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number }> = {};
+    for (const cmd of (aPayerCommandes || [])) {
+      const tId = cmd.tableId || cmd.table?.id;
+      if (!tId) continue;
+      const numero = cmd.table?.numero || `Table ${tId}`;
+      if (!grouped[tId]) {
+        grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0 };
+      }
+      grouped[tId].commandes.push(cmd);
+      grouped[tId].total += Number(cmd.montantTotal);
+    }
+    return Object.values(grouped);
+  }, [aPayerCommandes]);
+
+  const barOrdersParTable = useMemo(() => {
+    const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number }> = {};
+    for (const cmd of barOrders) {
+      const tId = cmd.tableId || cmd.table?.id;
+      if (!tId) continue;
+      const numero = cmd.table?.numero || `Table ${tId}`;
+      if (!grouped[tId]) {
+        grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0 };
+      }
+      grouped[tId].commandes.push(cmd);
+      grouped[tId].total += totalDetails(cmd);
+    }
+    return Object.values(grouped);
+  }, [barOrders]);
+
   const roleLabels: Record<string, string> = {
     ADMIN: 'Administrateur', MANAGER: 'Manager', SERVEUR: 'Serveur',
     CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
@@ -236,21 +331,6 @@ export default function DashboardScreen() {
 
   // ============ CASHIER DASHBOARD ============
   if (isCaissier) {
-    const commandesAPayerGroup = useMemo(() => {
-      // Group commands to pay by table
-      const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number }> = {};
-      for (const cmd of (aPayerCommandes || [])) {
-        const tId = cmd.tableId || cmd.table?.id;
-        if (!tId) continue;
-        const numero = cmd.table?.numero || `Table ${tId}`;
-        if (!grouped[tId]) {
-          grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0 };
-        }
-        grouped[tId].commandes.push(cmd);
-        grouped[tId].total += Number(cmd.montantTotal);
-      }
-      return Object.values(grouped);
-    }, [aPayerCommandes]);
 
     const openCashierModal = async (type: 'apayer' | 'factures') => {
       setCashierDetail(type);
@@ -459,18 +539,28 @@ export default function DashboardScreen() {
                     data={facturesList}
                     keyExtractor={(item) => String(item.id)}
                     renderItem={({ item }) => (
-                      <View style={styles.factureItem}>
+                      <TouchableOpacity
+                        style={styles.factureItem}
+                        onPress={() => {
+                          const url = paiementApi.imprimerFacture(item.id);
+                          Linking.openURL(url).catch(() => showToast.error('Impossible d\'ouvrir le reçu'));
+                        }}
+                        activeOpacity={0.7}
+                      >
                         <View style={styles.factureLeft}>
                           <Text style={styles.factureNum}>Facture {item.numero}</Text>
                           <Text style={styles.factureTable}>
                             Table {item.commande?.table?.numero || '?'} · {item.modePaiement ? MODE_LABELS_CASHIER[item.modePaiement] || item.modePaiement : '—'}
                           </Text>
                           <Text style={styles.factureDate}>
-                            {new Date(item.datePaiement).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(item.dateFacture).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                           </Text>
                         </View>
-                        <Text style={styles.factureMontant}>{formatPrixDevise(item.montant, devise)}</Text>
-                      </View>
+                        <View style={styles.factureRight}>
+                          <Text style={styles.factureMontant}>{formatPrixDevise(item.montantTotal, devise)}</Text>
+                          <Text style={styles.printIcon}>🖨</Text>
+                        </View>
+                      </TouchableOpacity>
                     )}
                     style={styles.detailList}
                   />
@@ -485,21 +575,6 @@ export default function DashboardScreen() {
 
   // ============ BAR DASHBOARD ============
   if (isBar) {
-    const barOrdersParTable = useMemo(() => {
-      const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number }> = {};
-      for (const cmd of barOrders) {
-        const tId = cmd.tableId || cmd.table?.id;
-        if (!tId) continue;
-        const numero = cmd.table?.numero || `Table ${tId}`;
-        if (!grouped[tId]) {
-          grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0 };
-        }
-        grouped[tId].commandes.push(cmd);
-        grouped[tId].total += Number(cmd.montantTotal);
-      }
-      return Object.values(grouped);
-    }, [barOrders]);
-
     const boissonsEnAttente = barOrders.filter((c: any) =>
       c.statut !== 'ANNULEE' && c.statut !== 'PAYEE'
     ).length;
@@ -595,6 +670,20 @@ export default function DashboardScreen() {
                       </Text>
                     </View>
                   </View>
+                  <TouchableOpacity
+                    style={styles.toutPretBtn}
+                    onPress={async () => {
+                      try {
+                        await commandesApi.toutPret(item.tableId, 'BAR');
+                        showToast.success('Toutes les boissons marquées prêtes');
+                        loadBarData();
+                      } catch (err) {
+                        showToast.error('Impossible de mettre à jour');
+                      }
+                    }}
+                  >
+                    <Text style={styles.toutPretText}>✅ Tout prêt</Text>
+                  </TouchableOpacity>
                   <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
                 {isExpanded && (
@@ -700,6 +789,20 @@ export default function DashboardScreen() {
                               </Text>
                             </View>
                           </View>
+                          <TouchableOpacity
+                            style={styles.toutPretBtn}
+                            onPress={async () => {
+                              try {
+                                await commandesApi.toutPret(item.tableId, 'BAR');
+                                showToast.success('Toutes les boissons marquées prêtes');
+                                loadBarData();
+                              } catch (err) {
+                                showToast.error('Impossible de mettre à jour');
+                              }
+                            }}
+                          >
+                            <Text style={styles.toutPretText}>✅ Tout prêt</Text>
+                          </TouchableOpacity>
                           <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
                         </TouchableOpacity>
                         {isExpanded && (
@@ -708,7 +811,7 @@ export default function DashboardScreen() {
                               <View key={cmd.id} style={styles.commandeItem}>
                                 <View style={styles.commandeHeader}>
                                   <Text style={styles.commandeId}>#{cmd.id}</Text>
-                                  <Text style={styles.commandeMontant}>{formatPrixDevise(cmd.montantTotal, devise)}</Text>
+                                  <Text style={styles.commandeMontant}>{formatPrixDevise(totalDetails(cmd), devise)}</Text>
                                 </View>
                                 {cmd.session?.dateArrivee && (
                                   <Text style={styles.cashierInfo}>
@@ -737,6 +840,231 @@ export default function DashboardScreen() {
             </View>
           </View>
         </Modal>
+      </ScrollView>
+    );
+  }
+
+  // ============ CUISINE DASHBOARD ============
+  if (isCuisine) {
+    const maintenant = Date.now();
+
+    const commandesParTableCuisine = useMemo(() => {
+      const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number; passeeDepuis: number }> = {};
+      for (const cmd of cuisineOrders) {
+        const tId = cmd.tableId || cmd.table?.id;
+        if (!tId) continue;
+        const numero = cmd.table?.numero || `Table ${tId}`;
+        if (!grouped[tId]) {
+          const dateCmd = new Date(cmd.dateCommande).getTime();
+          grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0, passeeDepuis: Math.floor((maintenant - dateCmd) / 60000) };
+        }
+        grouped[tId].commandes.push(cmd);
+        grouped[tId].total += totalDetails(cmd);
+      }
+      // Trier par temps d'attente (le plus ancien d'abord = FIFO)
+      const liste = Object.values(grouped);
+      liste.sort((a, b) => b.passeeDepuis - a.passeeDepuis);
+      return liste;
+    }, [cuisineOrders]);
+
+    const nbEnPreparation = cuisineOrders.filter((c: any) => c.statut === 'EN_PREPARATION').length;
+    const nbPretes = cuisineOrders.filter((c: any) => c.statut === 'PRETE').length;
+
+    const getWaitColor = (minutes: number) => {
+      if (minutes >= 15) return { bg: '#FF525215', accent: '#FF5252', label: 'Urgent' };
+      if (minutes >= 5) return { bg: '#FFC10715', accent: '#FFC107', label: 'Moyen' };
+      return { bg: '#4CAF5015', accent: '#4CAF50', label: 'Normal' };
+    };
+
+    const getDetailStatusStyle = (statutPrep: string) => {
+      if (statutPrep === 'PRET') return { bg: '#4CAF5020', color: '#2E7D32', icon: '✅' };
+      return { bg: '#FF980020', color: '#E65100', icon: '🔴' };
+    };
+
+    const handleUpdateDetail = async (detailId: number, statut: string) => {
+      try {
+        await commandesApi.updateDetailStatut(detailId, statut);
+        showToast.success(statut === 'PRET' ? 'Article prêt !' : 'Statut mis à jour');
+        loadCuisineData();
+      } catch (err) {
+        showToast.error('Impossible de mettre à jour');
+      }
+    };
+
+    const handleUpdateCmdStatut = async (commandeId: number, statut: string) => {
+      try {
+        await commandesApi.updateStatut(commandeId, statut);
+        showToast.success(`Commande → ${STATUT_LABELS[statut]}`);
+        loadCuisineData();
+      } catch (err) {
+        showToast.error('Impossible de mettre à jour');
+      }
+    };
+
+    return (
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>🍳 Cuisine</Text>
+            <Text style={styles.role}>{commandesParTableCuisine.length} tables en attente</Text>
+          </View>
+          <TouchableOpacity style={styles.avatar} onPress={() => navigation.navigate('Notifications')}>
+            <Text style={styles.avatarText}>{(user?.nom || 'C').charAt(0).toUpperCase()}</Text>
+            {unreadNotifs > 0 && (
+              <View style={styles.avatarBadge}><Text style={styles.avatarBadgeText}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text></View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats rapides */}
+        <View style={styles.cuisineStatsRow}>
+          <View style={[styles.cuisineStatCard, { backgroundColor: Colors.warning + '15', borderColor: Colors.warning + '40' }]}>
+            <Text style={styles.cuisineStatIcon}>⏳</Text>
+            <Text style={styles.cuisineStatLabel}>À préparer</Text>
+          </View>
+          <View style={[styles.cuisineStatCard, { backgroundColor: Colors.accent + '15', borderColor: Colors.accent + '40' }]}>
+            <Text style={styles.cuisineStatIcon}>👨‍🍳</Text>
+            <Text style={styles.cuisineStatValue}>{nbEnPreparation}</Text>
+            <Text style={styles.cuisineStatLabel}>En cours</Text>
+          </View>
+          <View style={[styles.cuisineStatCard, { backgroundColor: Colors.success + '15', borderColor: Colors.success + '40' }]}>
+            <Text style={styles.cuisineStatIcon}>✅</Text>
+            <Text style={styles.cuisineStatValue}>{nbPretes}</Text>
+            <Text style={styles.cuisineStatLabel}>Prêtes</Text>
+          </View>
+        </View>
+
+        {/* Liste des commandes */}
+        <Text style={styles.sectionTitle}>📋 À préparer</Text>
+
+        {loadingCuisine ? (
+          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+        ) : commandesParTableCuisine.length === 0 ? (
+          <View style={styles.emptyDetail}>
+            <Text style={styles.emptyDetailIcon}>🍳</Text>
+            <Text style={styles.emptyDetailText}>Aucune commande en attente</Text>
+          </View>
+        ) : (
+          commandesParTableCuisine.map((item) => {
+            const isExpanded = expandedTables.has(item.tableId);
+            const waitInfo = getWaitColor(item.passeeDepuis);
+            return (
+              <View key={item.tableId} style={[styles.cuisineTableGroup, { borderLeftColor: waitInfo.accent }]}>
+                <TouchableOpacity
+                  style={styles.cuisineTableHeader}
+                  onPress={() => toggleTable(item.tableId)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.tableHeaderLeft}>
+                    <Text style={styles.tableIcon}>🪑</Text>
+                    <View>
+                      <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
+                      <Text style={[styles.waitTime, { color: waitInfo.accent }]}>
+                        ⏱ {item.passeeDepuis} min d'attente
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.tableGroupRight}>
+                    <TouchableOpacity
+                      style={styles.toutPretBtn}
+                      onPress={async () => {
+                        try {
+                          await commandesApi.toutPret(item.tableId, 'CUISINE');
+                          showToast.success('Tous les articles cuisine marqués prêts');
+                          loadCuisineData();
+                        } catch (err) {
+                          showToast.error('Impossible de mettre à jour');
+                        }
+                      }}
+                    >
+                      <Text style={styles.toutPretText}>✅ Tout prêt</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.tableGroupTotal}>{formatPrixDevise(item.total, devise)}</Text>
+                    <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {isExpanded && (
+                  <View style={styles.cuisineTableDetails}>
+                    {item.commandes.map((cmd: any) => (
+                      <View key={cmd.id} style={styles.cuisineCommandeBlock}>
+                        <View style={styles.cuisineCommandeHeader}>
+                          <View style={[styles.cmdBadge, { backgroundColor: (STATUT_COLORS[cmd.statut] || Colors.inputBg) + '20' }]}>
+                            <Text style={[styles.cmdBadgeText, { color: STATUT_COLORS[cmd.statut] || Colors.text }]}>
+                              {STATUT_LABELS[cmd.statut] || cmd.statut}
+                            </Text>
+                          </View>
+                          <Text style={styles.cmdMontant}>{formatPrixDevise(totalDetails(cmd), devise)}</Text>
+                        </View>
+
+                        {/* Articles */}
+                        {cmd.details?.map((d: any) => {
+                          const ds = getDetailStatusStyle(d.statutPreparation);
+                          return (
+                            <View key={d.id} style={styles.cuisineDetailRow}>
+                              <Text style={styles.cuisineDetailStatus}>{ds.icon}</Text>
+                              <Text style={styles.cuisineDetailQte}>{d.quantite}x</Text>
+                              <Text style={styles.cuisineDetailNom}>{d.menu?.nom || 'Article'}</Text>
+                              {d.statutPreparation !== 'PRET' && (
+                                <TouchableOpacity
+                                  style={styles.detailReadyBtn}
+                                  onPress={() => handleUpdateDetail(d.id, 'PRET')}
+                                >
+                                  <Text style={styles.detailReadyText}>✅ Prêt</Text>
+                                </TouchableOpacity>
+                              )}
+                              {d.statutPreparation === 'PRET' && (
+                                <Text style={styles.detailDoneLabel}>Prêt</Text>
+                              )}
+                            </View>
+                          );
+                        })}
+
+                        {/* Actions commande */}
+                        <View style={styles.cuisineActions}>
+                          {cmd.statut === 'VALIDEE' && (
+                            <TouchableOpacity
+                              style={[styles.actionBtn, { backgroundColor: Colors.accent }]}
+                              onPress={() => handleUpdateCmdStatut(cmd.id, 'EN_PREPARATION')}
+                            >
+                              <Text style={styles.actionText}>👨‍🍳 En préparation</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })
+        )}
+
+        {/* Accès rapide */}
+        <Text style={styles.sectionTitle}>Accès Rapide</Text>
+        <View style={styles.menuGrid}>
+          {filteredMenu.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.menuItem}
+              onPress={() => navigation.navigate(item.screen)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.menuIconBox, { backgroundColor: (item as any).color + '18' }]}>
+                <Text style={styles.menuIcon}>{item.icon}</Text>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{item.badge > 9 ? '9+' : item.badge}</Text></View>
+                )}
+              </View>
+              <Text style={styles.menuLabel}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ height: 40 }} />
       </ScrollView>
     );
   }
@@ -868,6 +1196,29 @@ export default function DashboardScreen() {
                                   {cmd.serveur.role ? ` (${roleLabels[cmd.serveur.role] || cmd.serveur.role})` : ''}
                                 </Text>
                               )}
+                              {/* Actions selon le rôle */}
+                              <View style={styles.orderActions}>
+                                {cmd.statut === 'EN_ATTENTE' && canValidate && (
+                                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.success }]} onPress={() => handleUpdateStatut(cmd.id, 'VALIDEE')}>
+                                    <Text style={styles.actionText}>✓ Valider</Text>
+                                  </TouchableOpacity>
+                                )}
+                                {cmd.statut === 'VALIDEE' && canPrepare && (
+                                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent }]} onPress={() => handleUpdateStatut(cmd.id, 'EN_PREPARATION')}>
+                                    <Text style={styles.actionText}>👨‍🍳 En préparation</Text>
+                                  </TouchableOpacity>
+                                )}
+                                {cmd.statut === 'EN_PREPARATION' && canMarkReady && (
+                                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.primary }]} onPress={() => handleUpdateStatut(cmd.id, 'PRETE')}>
+                                    <Text style={styles.actionText}>✅ Prête</Text>
+                                  </TouchableOpacity>
+                                )}
+                                {cmd.statut === 'PRETE' && canMarkServed && (
+                                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info }]} onPress={() => handleUpdateStatut(cmd.id, 'SERVIE')}>
+                                    <Text style={styles.actionText}>🍽 Servie</Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
                             </View>
                           ))}
                         </View>
@@ -1025,6 +1376,9 @@ const styles = StyleSheet.create({
     fontSize: 11, color: Colors.textLight, marginTop: 6, paddingTop: 6,
     borderTopWidth: 1, borderTopColor: Colors.border,
   },
+  orderActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 6 },
+  actionBtn: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7 },
+  actionText: { color: Colors.textWhite, fontWeight: '700', fontSize: 11 },
 
   // Empty
   emptyDetail: { alignItems: 'center', paddingVertical: 40 },
@@ -1046,6 +1400,8 @@ const styles = StyleSheet.create({
   factureTable: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   factureDate: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
   factureMontant: { fontSize: 16, fontWeight: '800', color: Colors.success },
+  factureRight: { alignItems: 'flex-end', gap: 4 },
+  printIcon: { fontSize: 16 },
 
   // Bar dashboard
   barHero: {
@@ -1067,4 +1423,66 @@ const styles = StyleSheet.create({
   barStatLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600', marginTop: 2 },
   barStatusBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
   barStatusText: { fontSize: 11, fontWeight: '700' },
+
+  // Cuisine dashboard
+  cuisineStatsRow: { flexDirection: 'row', paddingHorizontal: 12, marginTop: 8, gap: 8 },
+  cuisineStatCard: {
+    flex: 1, borderRadius: 16, padding: 14, alignItems: 'center',
+    borderWidth: 1.5,
+  },
+  cuisineStatIcon: { fontSize: 22, marginBottom: 4 },
+  cuisineStatValue: { fontSize: 22, fontWeight: '800', color: Colors.text },
+  cuisineStatLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600', marginTop: 2 },
+  cuisineTableGroup: {
+    backgroundColor: Colors.surface, borderRadius: 14, marginBottom: 10, marginHorizontal: 12,
+    overflow: 'hidden', borderLeftWidth: 5,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 3,
+  },
+  cuisineTableHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: 14,
+  },
+  waitTime: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+  cuisineTableDetails: {
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    backgroundColor: Colors.inputBg, paddingHorizontal: 10, paddingBottom: 10,
+  },
+  cuisineCommandeBlock: {
+    backgroundColor: Colors.surface, borderRadius: 12, padding: 12, marginTop: 8,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  cuisineCommandeHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  cmdBadge: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  cmdBadgeText: { fontSize: 11, fontWeight: '700' },
+  cmdMontant: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  cuisineDetailRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 6,
+    borderBottomWidth: 1, borderBottomColor: Colors.inputBg,
+  },
+  cuisineDetailStatus: { fontSize: 14, marginRight: 6, width: 24, textAlign: 'center' },
+  cuisineDetailQte: { fontSize: 14, fontWeight: '700', color: Colors.primary, width: 30 },
+  cuisineDetailNom: { flex: 1, fontSize: 14, color: Colors.text },
+  detailReadyBtn: {
+    backgroundColor: Colors.success + '18', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4,
+    borderWidth: 1, borderColor: Colors.success + '40',
+  },
+  detailReadyText: { fontSize: 11, fontWeight: '700', color: Colors.success },
+  detailDoneLabel: {
+    fontSize: 11, fontWeight: '700', color: Colors.success,
+    backgroundColor: Colors.success + '15', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+  },
+  cuisineActions: {
+    flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 6, paddingTop: 8,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+  tableGroupRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tableGroupTotal: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  toutPretBtn: {
+    backgroundColor: Colors.success + '18', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1, borderColor: Colors.success + '40',
+  },
+  toutPretText: { fontSize: 11, fontWeight: '700', color: Colors.success },
 });

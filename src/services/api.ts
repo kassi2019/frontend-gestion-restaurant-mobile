@@ -110,6 +110,8 @@ export const commandesApi = {
     api.patch(`/commandes/${id}/statut`, { statut }),
   updateDetailStatut: (id: number, statut: string) =>
     api.patch(`/commandes/details/${id}/statut`, { statut }),
+  toutPret: (tableId: number, destination: string) =>
+    api.post('/commandes/tout-pret', { tableId, destination }),
   getBySession: (sessionId: number) => api.get(`/commandes/session/${sessionId}`),
   createFromClient: (data: any) => api.post('/commandes/client', data),
 };
@@ -134,7 +136,10 @@ export const paiementApi = {
   payer: (commandeId: number, mode: string) => api.post(`/paiements/payer/${commandeId}`, { mode }),
   getFactures: (date?: string) => api.get('/paiements/factures', { params: date ? { date } : {} }),
   getFacture: (id: number) => api.get(`/paiements/factures/${id}`),
-  imprimerFacture: (id: number) => `${API_URL}/paiements/factures/${id}/imprimer`,
+  imprimerFacture: (id: number) => {
+    const token = store.getState().auth.token || '';
+    return `${API_URL}/paiements/factures/${id}/imprimer?token=${token}`;
+  },
   getCaisseJour: () => api.get('/paiements/caisse/jour'),
   cloturerCaisse: () => api.post('/paiements/caisse/cloture'),
 };

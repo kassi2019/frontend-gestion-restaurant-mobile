@@ -237,7 +237,7 @@ export default function CashierScreen() {
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Date</Text>
                   <Text style={styles.receiptValue}>
-                    {new Date(receiptData.datePaiement).toLocaleString('fr-FR')}
+                    {receiptData.date ? new Date(receiptData.date).toLocaleString('fr-FR') : '-'}
                   </Text>
                 </View>
 

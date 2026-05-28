@@ -111,7 +111,9 @@ export const selectDevise = (state: { auth: AuthState }) => state.auth.user?.dev
 
 export function formatPrixDevise(montant: number | string, devise?: string | null, decimals = 2) {
   const d = devise || '€';
-  return `${Number(montant).toFixed(decimals)} ${d}`;
+  const n = Number(montant);
+  if (isNaN(n)) return `0.${'0'.repeat(decimals)} ${d}`;
+  return `${n.toFixed(decimals)} ${d}`;
 }
 
 export default authSlice.reducer;

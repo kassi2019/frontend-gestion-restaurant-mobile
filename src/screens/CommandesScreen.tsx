@@ -40,6 +40,11 @@ const STATUT_LABELS: Record<string, string> = {
   ANNULEE: 'Annulée',
 };
 
+function totalDetails(cmd: any) {
+  if (!cmd.details) return 0;
+  return cmd.details.reduce((sum: number, d: any) => sum + Number(d.prix) * d.quantite, 0);
+}
+
 export default function CommandesScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const devise = useSelector(selectDevise);
@@ -47,6 +52,12 @@ export default function CommandesScreen() {
   const isServeur = user?.role === 'SERVEUR';
   const isCuisine = user?.role === 'CUISINE';
   const isBar = user?.role === 'BAR';
+  const isActorSpecifique = isCuisine || isBar;
+  const getCmdTotal = (cmd: any) => isActorSpecifique ? totalDetails(cmd) : Number(cmd.montantTotal);
+  const canValidate = isServeur || isManager;
+  const canPrepare = isCuisine || isBar || isManager;
+  const canMarkReady = isManager;
+  const canMarkServed = isServeur || isManager;
   const { sp, fs } = useResponsive();
   const [commandes, setCommandes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,7 +193,7 @@ export default function CommandesScreen() {
         };
       }
       grouped[key].commandes.push(c);
-      grouped[key].total += Number(c.montantTotal);
+      grouped[key].total += getCmdTotal(c);
     });
     return Object.values(grouped);
   }, [commandes, filterDate]);
@@ -208,7 +219,7 @@ export default function CommandesScreen() {
         };
       }
       grouped[key].commandes.push(c);
-      grouped[key].total += Number(c.montantTotal);
+      grouped[key].total += getCmdTotal(c);
     });
     return Object.values(grouped);
   }, [commandes, filterDate]);
@@ -277,7 +288,7 @@ export default function CommandesScreen() {
                     <View style={[styles.orderStatus, { backgroundColor: STATUT_COLORS[c.statut] + '18' }]}>
                       <Text style={[styles.orderStatusText, { color: STATUT_COLORS[c.statut] }]}>{STATUT_LABELS[c.statut]}</Text>
                     </View>
-                    <Text style={styles.orderTotal}>{formatPrixDevise(c.montantTotal, devise)}</Text>
+                    <Text style={styles.orderTotal}>{formatPrixDevise(getCmdTotal(c), devise)}</Text>
                   </View>
                   {c.details?.map((d: any) => (
                     <View key={d.id} style={styles.orderDetail}>
@@ -286,24 +297,24 @@ export default function CommandesScreen() {
                       <Text style={styles.orderPrice}>{formatPrixDevise(d.prix, devise)}</Text>
                     </View>
                   ))}
-                  {/* Actions */}
+                  {/* Actions selon le rôle */}
                   <View style={styles.orderActions}>
-                    {c.statut === 'EN_ATTENTE' && (
+                    {c.statut === 'EN_ATTENTE' && canValidate && (
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.success }]} onPress={() => handleUpdateStatut(c.id, 'VALIDEE')}>
                         <Text style={styles.actionText}>✓ Valider</Text>
                       </TouchableOpacity>
                     )}
-                    {c.statut === 'VALIDEE' && (
+                    {c.statut === 'VALIDEE' && canPrepare && (
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.accent }]} onPress={() => handleUpdateStatut(c.id, 'EN_PREPARATION')}>
-                        <Text style={styles.actionText}>👨‍🍳 En prépa</Text>
+                        <Text style={styles.actionText}>👨‍🍳 En préparation</Text>
                       </TouchableOpacity>
                     )}
-                    {c.statut === 'EN_PREPARATION' && (
+                    {c.statut === 'EN_PREPARATION' && canMarkReady && (
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.primary }]} onPress={() => handleUpdateStatut(c.id, 'PRETE')}>
                         <Text style={styles.actionText}>✅ Prête</Text>
                       </TouchableOpacity>
                     )}
-                    {c.statut === 'PRETE' && (
+                    {c.statut === 'PRETE' && canMarkServed && (
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.info }]} onPress={() => handleUpdateStatut(c.id, 'SERVIE')}>
                         <Text style={styles.actionText}>🍽 Servie</Text>
                       </TouchableOpacity>
@@ -355,7 +366,7 @@ export default function CommandesScreen() {
                       {new Date(c.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                     </Text>
                     {c.clientRef && <Text style={styles.orderClient}>👤 {c.clientRef}</Text>}
-                    <Text style={styles.orderTotal}>{formatPrixDevise(c.montantTotal, devise)}</Text>
+                    <Text style={styles.orderTotal}>{formatPrixDevise(getCmdTotal(c), devise)}</Text>
                   </View>
                   {c.details?.map((d: any) => (
                     <View key={d.id} style={styles.orderDetail}>
