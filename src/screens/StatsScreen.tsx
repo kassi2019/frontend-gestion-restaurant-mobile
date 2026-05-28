@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl,
+  View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, TouchableOpacity, Modal,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
@@ -8,6 +8,7 @@ import { Colors } from '../theme/colors';
 import { statistiquesApi } from '../services/api';
 import { showToast } from '../services/toast';
 import StatCard from '../components/StatCard';
+import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 export default function StatsScreen() {
   const devise = useSelector(selectDevise);
@@ -18,24 +19,47 @@ export default function StatsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadData = async () => {
+  // Filtres de date — par défaut aujourd'hui
+  const today = toDateStr(new Date());
+  const [dateDebut, setDateDebut] = useState(today);
+  const [dateFin, setDateFin] = useState(today);
+  const [showDebutPicker, setShowDebutPicker] = useState(false);
+  const [showFinPicker, setShowFinPicker] = useState(false);
+
+  // Modale de détail
+  const [showDetail, setShowDetail] = useState(false);
+  const [detailType, setDetailType] = useState('');
+  const [ventesDetail, setVentesDetail] = useState<any>(null);
+
+  const openDetail = async (type: string) => {
+    setDetailType(type);
+    setShowDetail(true);
+    if (type === 'ventes') {
+      try {
+        const { data } = await statistiquesApi.getVentes(dateDebut, dateFin);
+        setVentesDetail(data);
+      } catch (e) { setVentesDetail(null); }
+    }
+  };
+
+  const loadData = useCallback(async () => {
     try {
       const [dashRes, platsRes, servRes, affRes] = await Promise.all([
-        statistiquesApi.getDashboard(),
-        statistiquesApi.getPlatsPopulaires(10),
-        statistiquesApi.getPerformanceServeurs(),
-        statistiquesApi.getAffluence(),
+        statistiquesApi.getDashboard(dateDebut, dateFin),
+        statistiquesApi.getPlatsPopulaires(10, dateDebut, dateFin),
+        statistiquesApi.getPerformanceServeurs(dateDebut, dateFin),
+        statistiquesApi.getAffluence(dateDebut, dateFin),
       ]);
       setDashboard(dashRes.data);
-      setPlatsPop(platsRes.data);
-      setServeurs(servRes.data);
-      setAffluence(affRes.data);
+      setPlatsPop(Array.isArray(platsRes.data) ? platsRes.data : []);
+      setServeurs(Array.isArray(servRes.data) ? servRes.data : []);
+      setAffluence(Array.isArray(affRes.data) ? affRes.data : []);
     } catch (err) {
       showToast.error('Erreur de chargement');
     } finally { setLoading(false); }
-  };
+  }, [dateDebut, dateFin]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 
@@ -44,35 +68,54 @@ export default function StatsScreen() {
   }
 
   const maxAffluence = Math.max(...affluence.map((x: any) => x.commandes), 1);
+  const dateLabel = dateDebut === dateFin
+    ? formatDisplay(dateDebut)
+    : `${formatDisplay(dateDebut)} → ${formatDisplay(dateFin)}`;
 
   return (
     <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}>
-      {/* Carte resume principal */}
-      <View style={styles.heroCard}>
-        <Text style={styles.heroLabel}>Chiffre d'affaires du jour</Text>
-        <Text style={styles.heroValue}>{formatPrixDevise(dashboard?.chiffreAffairesJour || 0, devise, 0)}</Text>
+      {/* Filtre de date */}
+      <View style={styles.filterRow}>
+        <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDebutPicker(true)}>
+          <Text style={styles.dateBtnLabel}>Du</Text>
+          <Text style={styles.dateBtnValue}>{formatDisplay(dateDebut)}</Text>
+        </TouchableOpacity>
+        <Text style={styles.dateSep}>→</Text>
+        <TouchableOpacity style={styles.dateBtn} onPress={() => setShowFinPicker(true)}>
+          <Text style={styles.dateBtnLabel}>Au</Text>
+          <Text style={styles.dateBtnValue}>{formatDisplay(dateFin)}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Stats en grille 2x2 */}
+      {/* Carte resume principal */}
+      <View style={styles.heroCard}>
+        <Text style={styles.heroLabel}>Chiffre d'affaires</Text>
+        <Text style={styles.heroValue}>{formatPrixDevise(dashboard?.chiffreAffairesJour || 0, devise, 0)}</Text>
+        <Text style={styles.heroDate}>{dateLabel}</Text>
+      </View>
+
+      {/* Stats en grille 2x2 — cliquables */}
       <View style={styles.statsGrid}>
-        <View style={styles.statsGridItem}>
+        <TouchableOpacity style={styles.statsGridItem} onPress={() => openDetail('commandes')} activeOpacity={0.7}>
           <StatCard title="Commandes" value={dashboard?.commandesJour || 0} icon="📋" color={Colors.primary} />
-        </View>
-        <View style={styles.statsGridItem}>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.statsGridItem} onPress={() => openDetail('tables')} activeOpacity={0.7}>
           <StatCard title="Tables" value={dashboard?.totalTables || 0} icon="🪑" color={Colors.accent} />
-        </View>
-        <View style={styles.statsGridItem}>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.statsGridItem} onPress={() => openDetail('serveurs')} activeOpacity={0.7}>
           <StatCard title="Serveurs" value={dashboard?.serveursActifs || 0} icon="👤" color={Colors.warning} />
-        </View>
-        <View style={styles.statsGridItem}>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.statsGridItem} onPress={() => openDetail('ventes')} activeOpacity={0.7}>
           <StatCard title="Prix moyen" value={`${(dashboard?.panierMoyen || 0).toFixed(0)} ${devise}`} icon="🏷" color={Colors.info} />
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Section: Top Plats */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>🏆 Top 5 Plats</Text>
-        {platsPop.slice(0, 5).map((p, i) => (
+        <Text style={styles.sectionTitle}>🏆 Top Plats</Text>
+        {platsPop.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune donnée</Text>
+        ) : platsPop.slice(0, 5).map((p, i) => (
           <View key={i} style={styles.rankRow}>
             <View style={[styles.rankBadge, i === 0 && styles.rankBadgeGold, i === 1 && styles.rankBadgeSilver, i === 2 && styles.rankBadgeBronze]}>
               <Text style={styles.rankBadgeText}>#{i + 1}</Text>
@@ -87,7 +130,9 @@ export default function StatsScreen() {
       {/* Section: Performance Serveurs */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>👨‍🍳 Performance Serveurs</Text>
-        {serveurs.slice(0, 5).map((s, i) => {
+        {serveurs.length === 0 ? (
+          <Text style={styles.emptyText}>Aucune donnée</Text>
+        ) : serveurs.slice(0, 5).map((s, i) => {
           const max = Math.max(...serveurs.map((x: any) => x.chiffreAffaires || 0), 1);
           const pct = Math.round((s.chiffreAffaires / max) * 100);
           return (
@@ -132,6 +177,87 @@ export default function StatsScreen() {
       </View>
 
       <View style={{ height: 50 }} />
+
+      {/* Modale de détail */}
+      <Modal visible={showDetail} transparent animationType="slide">
+        <View style={styles.detailOverlay}>
+          <View style={styles.detailContent}>
+            <View style={styles.detailHeader}>
+              <Text style={styles.detailTitle}>
+                {detailType === 'commandes' ? '📋 Détail des commandes' :
+                 detailType === 'tables' ? '🪑 Tables' :
+                 detailType === 'serveurs' ? '👤 Serveurs actifs' :
+                 detailType === 'ventes' ? '💰 Détail des ventes' : ''}
+              </Text>
+              <TouchableOpacity onPress={() => setShowDetail(false)} style={styles.detailCloseBtn}>
+                <Text style={styles.detailCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 400 }}>
+              {/* Commandes */}
+              {detailType === 'commandes' && (
+                <View style={{ padding: 16 }}>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Total commandes</Text><Text style={styles.detailValue}>{dashboard?.commandesJour || 0}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Chiffre d'affaires</Text><Text style={styles.detailValue}>{formatPrixDevise(dashboard?.chiffreAffairesJour || 0, devise)}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Panier moyen</Text><Text style={styles.detailValue}>{(dashboard?.panierMoyen || 0).toFixed(0)} {devise}</Text></View>
+                </View>
+              )}
+
+              {/* Tables */}
+              {detailType === 'tables' && (
+                <View style={{ padding: 16 }}>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Total tables</Text><Text style={styles.detailValue}>{dashboard?.totalTables || 0}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Serveurs actifs</Text><Text style={styles.detailValue}>{dashboard?.serveursActifs || 0}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Commandes aujourd'hui</Text><Text style={styles.detailValue}>{dashboard?.commandesJour || 0}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Moyenne par table</Text><Text style={styles.detailValue}>{dashboard?.totalTables > 0 ? (dashboard.commandesJour / dashboard.totalTables).toFixed(1) : '0'} cmd/table</Text></View>
+                </View>
+              )}
+
+              {/* Serveurs */}
+              {detailType === 'serveurs' && (
+                <View style={{ padding: 16 }}>
+                  {serveurs.length === 0 ? (
+                    <Text style={{ color: Colors.textLight, textAlign: 'center', padding: 20 }}>Aucun serveur avec planning sur cette période</Text>
+                  ) : serveurs.map((s, i) => (
+                    <View key={i} style={[styles.detailRow, { paddingVertical: 10 }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontWeight: '600', color: Colors.text }}>#{i + 1} {s.nom}</Text>
+                        <Text style={{ fontSize: 11, color: Colors.textLight }}>{s.commandes} commandes</Text>
+                      </View>
+                      <Text style={{ fontWeight: '700', color: Colors.success, fontSize: 15 }}>{formatPrixDevise(s.chiffreAffaires, devise)}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Ventes */}
+              {detailType === 'ventes' && (
+                <View style={{ padding: 16 }}>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Nombre de ventes</Text><Text style={styles.detailValue}>{ventesDetail?.nombreCommandes || 0}</Text></View>
+                  <View style={styles.detailRow}><Text style={styles.detailLabel}>Chiffre d'affaires</Text><Text style={styles.detailValue}>{formatPrixDevise(ventesDetail?.chiffreAffaires || 0, devise)}</Text></View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Prix moyen</Text>
+                    <Text style={styles.detailValue}>
+                      {ventesDetail?.nombreCommandes > 0
+                        ? formatPrixDevise(ventesDetail.chiffreAffaires / ventesDetail.nombreCommandes, devise)
+                        : '0 ' + devise}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity style={styles.detailCloseFull} onPress={() => setShowDetail(false)}>
+              <Text style={{ color: Colors.textLight, fontWeight: '600', fontSize: 14 }}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Calendar Pickers */}
+      <CalendarPicker visible={showDebutPicker} value={dateDebut} onSelect={(d) => { setDateDebut(d); setShowDebutPicker(false); }} onClose={() => setShowDebutPicker(false)} />
+      <CalendarPicker visible={showFinPicker} value={dateFin} onSelect={(d) => { setDateFin(d); setShowFinPicker(false); }} onClose={() => setShowFinPicker(false)} />
     </ScrollView>
   );
 }
@@ -139,6 +265,19 @@ export default function StatsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  // Filtre date
+  filterRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginHorizontal: 12, marginTop: 10, gap: 8,
+  },
+  dateBtn: {
+    flex: 1, backgroundColor: Colors.surface, borderRadius: 14, padding: 12,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center',
+  },
+  dateBtnLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
+  dateBtnValue: { fontSize: 14, fontWeight: '700', color: Colors.primary, marginTop: 2, textTransform: 'capitalize' },
+  dateSep: { fontSize: 16, color: Colors.textLight },
 
   // Hero
   heroCard: {
@@ -149,6 +288,7 @@ const styles = StyleSheet.create({
   },
   heroLabel: { color: Colors.textWhite, fontSize: 13, opacity: 0.8, fontWeight: '600' },
   heroValue: { color: Colors.textWhite, fontSize: 36, fontWeight: '800', marginTop: 4 },
+  heroDate: { color: Colors.textWhite, fontSize: 12, opacity: 0.6, marginTop: 6, textTransform: 'capitalize' },
 
   // Stats grid
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8 },
@@ -157,6 +297,7 @@ const styles = StyleSheet.create({
   // Sections
   section: { marginTop: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.text, paddingHorizontal: 16, marginTop: 16, marginBottom: 10 },
+  emptyText: { textAlign: 'center', color: Colors.textLight, fontSize: 13, padding: 20 },
 
   // Rank row (Top plats)
   rankRow: {
@@ -211,4 +352,30 @@ const styles = StyleSheet.create({
   barTrack: { width: '100%', flex: 1, backgroundColor: Colors.inputBg, borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
   barFill: { width: '100%', backgroundColor: Colors.primary, borderRadius: 6, minHeight: 4 },
   barLabel: { fontSize: 10, color: Colors.textLight, marginTop: 6 },
+
+  // Detail modal
+  detailOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  detailContent: {
+    backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 20,
+  },
+  detailHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  detailTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
+  detailCloseBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.inputBg,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  detailCloseText: { fontSize: 16, color: Colors.textLight, fontWeight: '600' },
+  detailRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.inputBg,
+  },
+  detailLabel: { fontSize: 14, color: Colors.textLight },
+  detailValue: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  detailCloseFull: {
+    backgroundColor: Colors.inputBg, marginHorizontal: 16, borderRadius: 14,
+    paddingVertical: 12, alignItems: 'center', marginTop: 8,
+  },
 });

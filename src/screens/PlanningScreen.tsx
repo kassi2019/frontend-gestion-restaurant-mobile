@@ -49,11 +49,11 @@ export default function PlanningScreen() {
 
   const ROLE_LABELS: Record<string, string> = {
     ADMIN: 'Admin', MANAGER: 'Manager', SERVEUR: 'Serveur',
-    CUISINIER: 'Cuisinier', CAISSIER: 'Caissier',
+    CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
   };
   const ROLE_COLORS: Record<string, string> = {
     ADMIN: '#E74C3C', MANAGER: '#3498DB', SERVEUR: '#27AE60',
-    CUISINIER: '#F39C12', CAISSIER: '#9B59B6',
+    CUISINE: '#F39C12', BAR: '#E67E22', CAISSIER: '#9B59B6',
   };
 
   const rolesDisponibles = useMemo(() => {

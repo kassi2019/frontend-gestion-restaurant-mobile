@@ -28,7 +28,7 @@ const STATUT_COLORS: Record<string, string> = {
   RESERVEE: Colors.warning,
 };
 
-const ZONES = ['Terrasse', 'Intérieur', 'VIP'];
+const ZONES = ['Terrasse', 'Intérieur', 'VIP', 'Comptoir'];
 
 export default function TablesScreen() {
   const { user } = useSelector((state: RootState) => state.auth);

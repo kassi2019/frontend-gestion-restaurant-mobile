@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -18,6 +19,7 @@ import { RootState } from '../store';
 import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import StatCard from '../components/StatCard';
+import ActionSheet from '../components/ActionSheet';
 import { commandesApi, notificationsApi, paiementApi } from '../services/api';
 import { getSocket } from '../services/socket';
 import { showToast } from '../services/toast';
@@ -97,6 +99,19 @@ export default function DashboardScreen() {
   // Cuisine data
   const [cuisineOrders, setCuisineOrders] = useState<any[]>([]);
   const [loadingCuisine, setLoadingCuisine] = useState(false);
+
+  // Paiement depuis la recherche
+  const [selectedCommande, setSelectedCommande] = useState<any>(null);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+
+  const handlePrintReceipt = () => {
+    if (receiptData?.factureId) {
+      Linking.openURL(paiementApi.imprimerFacture(receiptData.factureId)).catch(() =>
+        showToast.error('Impossible d\'ouvrir le reçu'));
+    }
+  };
 
   const MODE_LABELS_CASHIER: Record<string, string> = {
     ESPECES: 'Especes', MOBILE_MONEY: 'Mobile Money', CARTE_BANCAIRE: 'Carte Bancaire',
@@ -331,6 +346,51 @@ export default function DashboardScreen() {
 
   // ============ CASHIER DASHBOARD ============
   if (isCaissier) {
+    const [searchCmd, setSearchCmd] = useState('');
+    const [searchResult, setSearchResult] = useState<any>(null);
+    const [searching, setSearching] = useState(false);
+
+    const handleSearchCmd = async () => {
+      const term = searchCmd.trim();
+      if (!term) return;
+      setSearching(true);
+      try {
+        const { data } = await commandesApi.rechercher(term);
+        const list = Array.isArray(data) ? data : [];
+        setSearchResult(list.length > 0 ? list[0] : null);
+        if (list.length === 0) showToast.error('Aucune commande trouvée');
+      } catch (err) {
+        showToast.error('Recherche impossible');
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    const handlePayer = async (mode: string) => {
+      if (!selectedCommande) return;
+      try {
+        const { data } = await paiementApi.payer(selectedCommande.id, mode);
+        setShowActionModal(false);
+        const facture = data?.facture;
+        if (facture) {
+          // Afficher l'aperçu du reçu
+          setReceiptData({
+            ...facture,
+            factureId: facture.id,
+            modePaiement: mode,
+            commande: selectedCommande,
+            details: selectedCommande.details || [],
+          });
+          setShowReceiptModal(true);
+        } else {
+          showToast.success('Paiement effectué');
+        }
+        setSelectedCommande(null);
+        loadCashierData();
+      } catch (err: any) {
+        showToast.error(err.response?.data?.message || 'Échec du paiement');
+      }
+    };
 
     const openCashierModal = async (type: 'apayer' | 'factures') => {
       setCashierDetail(type);
@@ -393,6 +453,62 @@ export default function DashboardScreen() {
               </View>
             </View>
             <Text style={styles.caisseCardCount}>{caisse.nombreFactures} facture(s) — Voir details</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Recherche par numéro CMD */}
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="N° commande (ex: CMD-0012)"
+            value={searchCmd}
+            onChangeText={setSearchCmd}
+            onSubmitEditing={handleSearchCmd}
+            returnKeyType="search"
+            placeholderTextColor={Colors.textLight}
+          />
+          <TouchableOpacity style={styles.searchBtn} onPress={handleSearchCmd} disabled={searching}>
+            <Text style={styles.searchBtnText}>{searching ? '...' : '🔍'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Résultat de la recherche */}
+        {searchResult && (
+          <TouchableOpacity
+            style={styles.searchResultCard}
+            activeOpacity={0.7}
+            onPress={() => {
+              const cmd = searchResult;
+              setSearchResult(null);
+              setSearchCmd('');
+              if (cmd.statut === 'SERVIE' || cmd.statut === 'PRETE') {
+                setSelectedCommande(cmd);
+                setShowActionModal(true);
+              } else {
+                showToast.warning('Commande pas encore prête');
+              }
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.primary }}>
+                {searchResult.numeroCommande || `CMD-${String(searchResult.id).padStart(4, '0')}`}
+              </Text>
+              <Text style={{
+                fontSize: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+                backgroundColor: (STATUT_COLORS[searchResult.statut] || '#EEE') + '20',
+                color: STATUT_COLORS[searchResult.statut] || '#333', fontWeight: '700',
+              }}>
+                {STATUT_LABELS[searchResult.statut] || searchResult.statut}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 13, color: Colors.textLight, marginTop: 4 }}>
+              Table {searchResult.table?.numero || '?'} · {formatPrixDevise(searchResult.montantTotal, devise)}
+            </Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.success, marginTop: 6 }}>
+              {searchResult.statut === 'PAYEE' ? '🖨 Cliquer pour réimprimer le reçu' :
+               searchResult.statut === 'SERVIE' || searchResult.statut === 'PRETE' ? '💰 Cliquer pour payer' :
+               '⏳ En attente de préparation'}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -566,6 +682,80 @@ export default function DashboardScreen() {
                   />
                 )
               ) : null}
+            </View>
+          </View>
+        </Modal>
+
+        {/* ActionSheet de paiement depuis la recherche */}
+        <ActionSheet
+          visible={showActionModal}
+          title={`Paiement ${selectedCommande?.numeroCommande || `CMD-${String(selectedCommande?.id || 0).padStart(4, '0')}`}`}
+          subtitle={formatPrixDevise(selectedCommande?.montantTotal || 0, devise)}
+          actions={[
+            { icon: '💵', label: 'Espèces', onPress: () => handlePayer('ESPECES') },
+            { icon: '📱', label: 'Mobile Money', onPress: () => handlePayer('MOBILE_MONEY') },
+            { icon: '💳', label: 'Carte Bancaire', onPress: () => handlePayer('CARTE_BANCAIRE') },
+          ]}
+          onClose={() => setShowActionModal(false)}
+        />
+
+        {/* Aperçu reçu après paiement */}
+        <Modal visible={showReceiptModal} transparent animationType="slide">
+          <View style={styles.receiptOverlay}>
+            <View style={styles.receiptContent}>
+              <View style={styles.receiptHeader}>
+                <Text style={styles.receiptTitle}>🧾 Reçu de paiement</Text>
+                <TouchableOpacity onPress={() => { setShowReceiptModal(false); setReceiptData(null); }} style={styles.receiptClose}>
+                  <Text style={styles.receiptCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {receiptData && (
+                <View style={{ padding: 16 }}>
+                  <View style={styles.receiptRow}>
+                    <Text style={{ color: Colors.textLight }}>Facture</Text>
+                    <Text style={{ fontWeight: '600' }}>{receiptData.numero}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={{ color: Colors.textLight }}>Table</Text>
+                    <Text style={{ fontWeight: '600' }}>Table {receiptData.commande?.table?.numero || '?'}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={{ color: Colors.textLight }}>Mode</Text>
+                    <Text style={{ fontWeight: '600' }}>{MODE_LABELS_CASHIER[receiptData.modePaiement] || receiptData.modePaiement}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={{ color: Colors.textLight }}>Date</Text>
+                    <Text style={{ fontWeight: '600' }}>
+                      {receiptData.date ? new Date(receiptData.date).toLocaleString('fr-FR') : '-'}
+                    </Text>
+                  </View>
+
+                  <Text style={{ fontWeight: '700', marginTop: 16, marginBottom: 8 }}>Articles</Text>
+                  {receiptData.details?.map((d: any, i: number) => (
+                    <View key={i} style={styles.receiptRow}>
+                      <Text>{d.quantite}x {d.menu?.nom || 'Article'}</Text>
+                      <Text style={{ fontWeight: '600' }}>
+                        {formatPrixDevise(Number(d.prix) * (d.quantite || 1), devise)}
+                      </Text>
+                    </View>
+                  ))}
+
+                  <View style={[styles.receiptRow, { borderTopWidth: 2, borderTopColor: Colors.border, marginTop: 12, paddingTop: 12 }]}>
+                    <Text style={{ fontWeight: '800', fontSize: 16 }}>Total</Text>
+                    <Text style={{ fontWeight: '800', fontSize: 18, color: Colors.success }}>
+                      {formatPrixDevise(receiptData.montant, devise)}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity style={styles.printBtn} onPress={handlePrintReceipt}>
+                    <Text style={styles.printBtnText}>🖨 Imprimer / Télécharger le reçu</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.closeReceiptBtn} onPress={() => { setShowReceiptModal(false); setReceiptData(null); }}>
+                    <Text style={styles.closeReceiptText}>Fermer</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
         </Modal>
@@ -899,12 +1089,9 @@ export default function DashboardScreen() {
       }
     };
 
-    return (
-      <ScrollView
-        style={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
-      >
-        {/* Header */}
+    // Header + Stats (composant séparé pour ListHeaderComponent)
+    const CuisineHeader = () => (
+      <View>
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>🍳 Cuisine</Text>
@@ -918,7 +1105,6 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats rapides */}
         <View style={styles.cuisineStatsRow}>
           <View style={[styles.cuisineStatCard, { backgroundColor: Colors.warning + '15', borderColor: Colors.warning + '40' }]}>
             <Text style={styles.cuisineStatIcon}>⏳</Text>
@@ -936,110 +1122,21 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Liste des commandes */}
         <Text style={styles.sectionTitle}>📋 À préparer</Text>
-
-        {loadingCuisine ? (
+        {loadingCuisine && (
           <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
-        ) : commandesParTableCuisine.length === 0 ? (
+        )}
+        {!loadingCuisine && commandesParTableCuisine.length === 0 && (
           <View style={styles.emptyDetail}>
             <Text style={styles.emptyDetailIcon}>🍳</Text>
             <Text style={styles.emptyDetailText}>Aucune commande en attente</Text>
           </View>
-        ) : (
-          commandesParTableCuisine.map((item) => {
-            const isExpanded = expandedTables.has(item.tableId);
-            const waitInfo = getWaitColor(item.passeeDepuis);
-            return (
-              <View key={item.tableId} style={[styles.cuisineTableGroup, { borderLeftColor: waitInfo.accent }]}>
-                <View style={styles.cuisineTableHeader}>
-                  <TouchableOpacity
-                    style={styles.tableHeaderLeft}
-                    onPress={() => toggleTable(item.tableId)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.tableIcon}>🪑</Text>
-                    <View>
-                      <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
-                      <Text style={[styles.waitTime, { color: waitInfo.accent }]}>
-                        ⏱ {item.passeeDepuis} min d'attente
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.toutPretBtn}
-                    onPress={() => {
-                      commandesApi.toutPret(item.tableId, 'CUISINE').then(() => {
-                        showToast.success('Tous les articles cuisine marqués prêts');
-                        loadCuisineData();
-                      }).catch(() => showToast.error('Impossible de mettre à jour'));
-                    }}
-                  >
-                    <Text style={styles.toutPretText}>✅ Tout prêt</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.tableGroupTotal}>{formatPrixDevise(item.total, devise)}</Text>
-                  <TouchableOpacity onPress={() => toggleTable(item.tableId)} activeOpacity={0.7}>
-                    <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {isExpanded && (
-                  <View style={styles.cuisineTableDetails}>
-                    {item.commandes.map((cmd: any) => (
-                      <View key={cmd.id} style={styles.cuisineCommandeBlock}>
-                        <View style={styles.cuisineCommandeHeader}>
-                          <View style={[styles.cmdBadge, { backgroundColor: (STATUT_COLORS[cmd.statut] || Colors.inputBg) + '20' }]}>
-                            <Text style={[styles.cmdBadgeText, { color: STATUT_COLORS[cmd.statut] || Colors.text }]}>
-                              {STATUT_LABELS[cmd.statut] || cmd.statut}
-                            </Text>
-                          </View>
-                          <Text style={styles.cmdMontant}>{formatPrixDevise(totalDetails(cmd), devise)}</Text>
-                        </View>
-
-                        {/* Articles */}
-                        {cmd.details?.map((d: any) => {
-                          const ds = getDetailStatusStyle(d.statutPreparation);
-                          return (
-                            <View key={d.id} style={styles.cuisineDetailRow}>
-                              <Text style={styles.cuisineDetailStatus}>{ds.icon}</Text>
-                              <Text style={styles.cuisineDetailQte}>{d.quantite}x</Text>
-                              <Text style={styles.cuisineDetailNom}>{d.menu?.nom || 'Article'}</Text>
-                              {d.statutPreparation !== 'PRET' && (
-                                <TouchableOpacity
-                                  style={styles.detailReadyBtn}
-                                  onPress={() => handleUpdateDetail(d.id, 'PRET')}
-                                >
-                                  <Text style={styles.detailReadyText}>✅ Prêt</Text>
-                                </TouchableOpacity>
-                              )}
-                              {d.statutPreparation === 'PRET' && (
-                                <Text style={styles.detailDoneLabel}>Prêt</Text>
-                              )}
-                            </View>
-                          );
-                        })}
-
-                        {/* Actions commande */}
-                        <View style={styles.cuisineActions}>
-                          {cmd.statut === 'VALIDEE' && (
-                            <TouchableOpacity
-                              style={[styles.actionBtn, { backgroundColor: Colors.accent }]}
-                              onPress={() => handleUpdateCmdStatut(cmd.id, 'EN_PREPARATION')}
-                            >
-                              <Text style={styles.actionText}>👨‍🍳 En préparation</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })
         )}
+      </View>
+    );
 
-        {/* Accès rapide */}
+    const CuisineFooter = () => (
+      <View>
         <Text style={styles.sectionTitle}>Accès Rapide</Text>
         <View style={styles.menuGrid}>
           {filteredMenu.map((item, index) => (
@@ -1060,7 +1157,105 @@ export default function DashboardScreen() {
           ))}
         </View>
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </View>
+    );
+
+    return (
+      <FlatList
+        data={commandesParTableCuisine}
+        keyExtractor={(item: any) => String(item.tableId)}
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
+        ListHeaderComponent={<CuisineHeader />}
+        ListFooterComponent={<CuisineFooter />}
+        renderItem={({ item }: { item: any }) => {
+          const isExpanded = expandedTables.has(item.tableId);
+          const waitInfo = getWaitColor(item.passeeDepuis);
+          return (
+            <View style={[styles.cuisineTableGroup, { borderLeftColor: waitInfo.accent }]}>
+              <View style={styles.cuisineTableHeader}>
+                <TouchableOpacity
+                  style={styles.tableHeaderLeft}
+                  onPress={() => toggleTable(item.tableId)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.tableIcon}>🪑</Text>
+                  <View>
+                    <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
+                    <Text style={[styles.waitTime, { color: waitInfo.accent }]}>
+                      ⏱ {item.passeeDepuis} min d'attente
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.toutPretBtn}
+                  onPress={() => {
+                    commandesApi.toutPret(item.tableId, 'CUISINE').then(() => {
+                      showToast.success('Tous les articles cuisine marqués prêts');
+                      loadCuisineData();
+                    }).catch(() => showToast.error('Impossible de mettre à jour'));
+                  }}
+                >
+                  <Text style={styles.toutPretText}>✅ Tout prêt</Text>
+                </TouchableOpacity>
+                <Text style={styles.tableGroupTotal}>{formatPrixDevise(item.total, devise)}</Text>
+                <TouchableOpacity onPress={() => toggleTable(item.tableId)} activeOpacity={0.7}>
+                  <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {isExpanded && (
+                <View style={styles.cuisineTableDetails}>
+                  {item.commandes.map((cmd: any) => (
+                    <View key={cmd.id} style={styles.cuisineCommandeBlock}>
+                      <View style={styles.cuisineCommandeHeader}>
+                        <View style={[styles.cmdBadge, { backgroundColor: (STATUT_COLORS[cmd.statut] || Colors.inputBg) + '20' }]}>
+                          <Text style={[styles.cmdBadgeText, { color: STATUT_COLORS[cmd.statut] || Colors.text }]}>
+                            {STATUT_LABELS[cmd.statut] || cmd.statut}
+                          </Text>
+                        </View>
+                        <Text style={styles.cmdMontant}>{formatPrixDevise(totalDetails(cmd), devise)}</Text>
+                      </View>
+
+                      {cmd.details?.map((d: any) => {
+                        const ds = getDetailStatusStyle(d.statutPreparation);
+                        return (
+                          <View key={d.id} style={styles.cuisineDetailRow}>
+                            <Text style={styles.cuisineDetailStatus}>{ds.icon}</Text>
+                            <Text style={styles.cuisineDetailQte}>{d.quantite}x</Text>
+                            <Text style={styles.cuisineDetailNom}>{d.menu?.nom || 'Article'}</Text>
+                            {d.statutPreparation !== 'PRET' ? (
+                              <TouchableOpacity
+                                style={styles.detailReadyBtn}
+                                onPress={() => handleUpdateDetail(d.id, 'PRET')}
+                              >
+                                <Text style={styles.detailReadyText}>✅ Prêt</Text>
+                              </TouchableOpacity>
+                            ) : (
+                              <Text style={styles.detailDoneLabel}>Prêt</Text>
+                            )}
+                          </View>
+                        );
+                      })}
+
+                      <View style={styles.cuisineActions}>
+                        {cmd.statut === 'VALIDEE' && (
+                          <TouchableOpacity
+                            style={[styles.actionBtn, { backgroundColor: Colors.accent }]}
+                            onPress={() => handleUpdateCmdStatut(cmd.id, 'EN_PREPARATION')}
+                          >
+                            <Text style={styles.actionText}>👨‍🍳 En préparation</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        }}
+      />
     );
   }
 
@@ -1475,9 +1670,49 @@ const styles = StyleSheet.create({
   },
   tableGroupRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tableGroupTotal: { fontSize: 16, fontWeight: '700', color: Colors.primary },
+  searchRow: {
+    flexDirection: 'row', marginHorizontal: 12, marginTop: 8, gap: 8,
+  },
+  searchInput: {
+    flex: 1, backgroundColor: Colors.surface, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
+    fontSize: 14, color: Colors.text, borderWidth: 1, borderColor: Colors.border,
+  },
+  searchBtn: {
+    backgroundColor: Colors.primary, borderRadius: 14, width: 48, justifyContent: 'center', alignItems: 'center',
+  },
+  searchBtnText: { fontSize: 18 },
+  searchResultCard: {
+    backgroundColor: Colors.surface, marginHorizontal: 12, marginTop: 8, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: Colors.primary + '30',
+  },
   toutPretBtn: {
     backgroundColor: Colors.success + '18', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5,
     borderWidth: 1, borderColor: Colors.success + '40',
   },
   toutPretText: { fontSize: 11, fontWeight: '700', color: Colors.success },
+
+  // Receipt modal
+  receiptOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', paddingHorizontal: 20 },
+  receiptContent: {
+    backgroundColor: Colors.surface, borderRadius: 20, maxHeight: '80%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 10,
+  },
+  receiptHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  receiptTitle: { fontSize: 18, fontWeight: '700', color: Colors.success },
+  receiptClose: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.inputBg,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  receiptCloseText: { fontSize: 16, color: Colors.textLight, fontWeight: '600' },
+  receiptRow: {
+    flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6,
+    borderBottomWidth: 1, borderBottomColor: Colors.inputBg,
+  },
+  printBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
+  printBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
+  closeReceiptBtn: { backgroundColor: Colors.inputBg, borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 8 },
+  closeReceiptText: { color: Colors.textLight, fontWeight: '600', fontSize: 14 },
 });

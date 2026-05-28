@@ -123,7 +123,7 @@ export default function LoginScreen() {
               <Text style={styles.inputIcon}>📱</Text>
               <TextInput
                 style={styles.input}
-                placeholder="+243 XXX XXX XXX"
+                placeholder="+225 00 00 00 00 00"
                 placeholderTextColor={Colors.textLight}
                 keyboardType="phone-pad"
                 value={telephone}

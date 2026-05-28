@@ -112,6 +112,7 @@ export const commandesApi = {
     api.patch(`/commandes/details/${id}/statut`, { statut }),
   toutPret: (tableId: number, destination: string) =>
     api.post('/commandes/tout-pret', { tableId, destination }),
+  rechercher: (term: string) => api.get(`/commandes/recherche/${term}`),
   getBySession: (sessionId: number) => api.get(`/commandes/session/${sessionId}`),
   createFromClient: (data: any) => api.post('/commandes/client', data),
 };
@@ -145,11 +146,16 @@ export const paiementApi = {
 };
 
 export const statistiquesApi = {
-  getDashboard: () => api.get('/statistiques/dashboard'),
-  getVentes: (debut?: string, fin?: string) => api.get('/statistiques/ventes', { params: { debut, fin } }),
-  getPlatsPopulaires: (limit?: number) => api.get('/statistiques/plats-populaires', { params: { limit } }),
-  getPerformanceServeurs: () => api.get('/statistiques/performance-serveurs'),
-  getAffluence: () => api.get('/statistiques/affluence'),
+  getDashboard: (debut?: string, fin?: string) =>
+    api.get('/statistiques/dashboard', { params: { debut, fin } }),
+  getVentes: (debut?: string, fin?: string) =>
+    api.get('/statistiques/ventes', { params: { debut, fin } }),
+  getPlatsPopulaires: (limit?: number, debut?: string, fin?: string) =>
+    api.get('/statistiques/plats-populaires', { params: { limit, debut, fin } }),
+  getPerformanceServeurs: (debut?: string, fin?: string) =>
+    api.get('/statistiques/performance-serveurs', { params: { debut, fin } }),
+  getAffluence: (debut?: string, fin?: string) =>
+    api.get('/statistiques/affluence', { params: { debut, fin } }),
 };
 
 export const restaurantApi = {
