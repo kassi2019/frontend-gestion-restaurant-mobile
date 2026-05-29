@@ -13,12 +13,13 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { updateUser } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
-import { restaurantApi, paiementApi } from '../services/api';
+import { restaurantApi, paiementApi, authApi } from '../services/api';
 import { showToast } from '../services/toast';
 import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 const MENUS = [
   { key: 'infos',   icon: '🏪', label: 'Informations du restaurant' },
+  { key: 'abonnement', icon: '⭐', label: 'Abonnement' },
   { key: 'cloture', icon: '🔒', label: 'Clôture Globale' },
 ];
 
@@ -44,6 +45,12 @@ export default function RestaurantSettingsScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [clotureLoading, setClotureLoading] = useState(false);
 
+  // Abonnement
+  const [aboLoading, setAboLoading] = useState(false);
+  const [aboStatus, setAboStatus] = useState<any>(null);
+  const [aboCode, setAboCode] = useState('');
+  const [aboActivationLoading, setAboActivationLoading] = useState(false);
+
   useEffect(() => {
     if (user?.restaurantId) {
       restaurantApi.getInfo(user.restaurantId).then(({ data }) => {
@@ -60,6 +67,42 @@ export default function RestaurantSettingsScreen() {
       }).catch(() => showToast.error('Impossible de charger les infos du restaurant'));
     }
   }, [user?.restaurantId]);
+
+  // Charger le statut d'abonnement quand le menu abonnement est actif
+  useEffect(() => {
+    if (activeMenu === 'abonnement') {
+      setAboLoading(true);
+      authApi.getAbonnement()
+        .then(({ data }) => setAboStatus(data))
+        .catch(() => showToast.error('Impossible de charger le statut d\'abonnement'))
+        .finally(() => setAboLoading(false));
+    }
+  }, [activeMenu]);
+
+  const handleActiverAbonnement = async () => {
+    if (!aboCode.trim()) {
+      showToast.error('Veuillez entrer un code d\'activation');
+      return;
+    }
+    setAboActivationLoading(true);
+    try {
+      const { data } = await authApi.activerCode({ telephone: user!.telephone, code: aboCode.trim() });
+      showToast.success(data.message || 'Abonnement activé !');
+      setAboCode('');
+      // Recharger le statut
+      const { data: statusData } = await authApi.getAbonnement();
+      setAboStatus(statusData);
+      // Mettre à jour le user dans le store
+      dispatch(updateUser({
+        typeAbonnement: statusData.typeAbonnement,
+        dateFinAbonnement: statusData.dateFinAbonnement,
+      }));
+    } catch (err: any) {
+      showToast.error(err.response?.data?.message || 'Code invalide');
+    } finally {
+      setAboActivationLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!nom.trim() || !adresse.trim()) {
@@ -189,6 +232,79 @@ export default function RestaurantSettingsScreen() {
           </View>
         )}
 
+        {/* ========== ABONNEMENT ========== */}
+        {activeMenu === 'abonnement' && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>⭐ Abonnement</Text>
+
+            {!isAdmin ? (
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>🔐 Réservé à l'administrateur</Text>
+              </View>
+            ) : aboLoading ? (
+              <ActivityIndicator color={Colors.primary} style={{ marginVertical: 20 }} />
+            ) : aboStatus ? (
+              <>
+                {/* Statut */}
+                <View style={[styles.statusBadge, { backgroundColor: aboStatus.estActif ? Colors.success + '15' : Colors.danger + '15' }]}>
+                  <Text style={[styles.statusText, { color: aboStatus.estActif ? Colors.success : Colors.danger }]}>
+                    {aboStatus.estActif ? '✅ Abonnement ACTIF' : '❌ Abonnement EXPIRÉ'}
+                  </Text>
+                </View>
+
+                <View style={styles.aboInfoRow}>
+                  <Text style={styles.aboLabel}>Type</Text>
+                  <Text style={styles.aboValue}>
+                    {aboStatus.typeAbonnement === 'TRIAL' ? '🆓 Période d\'essai' :
+                     aboStatus.typeAbonnement === 'MENSUEL' ? '📅 Mensuel' :
+                     aboStatus.typeAbonnement === 'ANNUEL' ? '📆 Annuel' : aboStatus.typeAbonnement}
+                  </Text>
+                </View>
+
+                <View style={styles.aboInfoRow}>
+                  <Text style={styles.aboLabel}>Expire le</Text>
+                  <Text style={styles.aboValue}>
+                    {aboStatus.dateFinAbonnement
+                      ? new Date(aboStatus.dateFinAbonnement).toLocaleDateString('fr-FR')
+                      : '—'}
+                  </Text>
+                </View>
+
+                <View style={styles.aboInfoRow}>
+                  <Text style={styles.aboLabel}>Jours restants</Text>
+                  <Text style={[styles.aboValue, { color: aboStatus.joursRestants <= 7 ? Colors.danger : Colors.success, fontWeight: '800' }]}>
+                    {aboStatus.joursRestants} jour(s)
+                  </Text>
+                </View>
+
+                {/* Saisie code */}
+                <View style={styles.aboActivation}>
+                  <Text style={styles.aboActivationTitle}>🔑 Activer un code</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={aboCode}
+                    onChangeText={setAboCode}
+                    placeholder="RESTO-XXXX-XXXX"
+                    placeholderTextColor={Colors.textLight}
+                    autoCapitalize="characters"
+                  />
+                  <TouchableOpacity
+                    style={[styles.saveBtn, aboActivationLoading && { opacity: 0.6 }]}
+                    onPress={handleActiverAbonnement}
+                    disabled={aboActivationLoading}
+                  >
+                    {aboActivationLoading ? (
+                      <ActivityIndicator color={Colors.textWhite} />
+                    ) : (
+                      <Text style={styles.saveBtnText}>Activer l'abonnement</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : null}
+          </View>
+        )}
+
         {/* ========== CLÔTURE GLOBALE ========== */}
         {activeMenu === 'cloture' && (
           <View style={styles.card}>
@@ -307,4 +423,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.inputBg, borderRadius: 10, padding: 12,
   },
   infoText: { fontSize: 14, color: Colors.warning, fontWeight: '600', textAlign: 'center' },
+  // Abonnement
+  aboInfoRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  aboLabel: { fontSize: 14, color: Colors.textLight, fontWeight: '500' },
+  aboValue: { fontSize: 14, color: Colors.text, fontWeight: '600' },
+  aboActivation: {
+    marginTop: 20, paddingTop: 16,
+    borderTopWidth: 2, borderTopColor: Colors.primary + '30',
+  },
+  aboActivationTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginBottom: 12 },
 });

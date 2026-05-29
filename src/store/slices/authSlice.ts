@@ -12,6 +12,8 @@ interface User {
   devise?: string;
   restaurantNom?: string;
   restaurantTelephone?: string;
+  typeAbonnement?: string;
+  dateFinAbonnement?: string | null;
 }
 
 interface AuthState {

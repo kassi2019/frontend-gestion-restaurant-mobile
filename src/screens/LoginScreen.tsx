@@ -35,6 +35,9 @@ export default function LoginScreen() {
   const [forgotPhone, setForgotPhone] = useState('');
   const [forgotPassword, setForgotPassword] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [showActivationModal, setShowActivationModal] = useState(false);
+  const [activationCode, setActivationCode] = useState('');
+  const [activationLoading, setActivationLoading] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -54,6 +57,27 @@ export default function LoginScreen() {
   const handleLogin = () => {
     if (!telephone.trim() || !password.trim()) return;
     dispatch(login({ telephone: telephone.trim(), mot_de_passe: password }));
+  };
+
+  // Vérifier si l'erreur est liée à l'abonnement expiré
+  const isAbonnementExpire = error?.includes('Abonnement expiré');
+
+  const handleActivateCode = async () => {
+    if (!activationCode.trim()) {
+      return Alert.alert('Erreur', 'Veuillez entrer un code d\'activation');
+    }
+    setActivationLoading(true);
+    try {
+      const { data } = await authApi.activerCode({ telephone: telephone.trim(), code: activationCode.trim() });
+      setShowActivationModal(false);
+      setActivationCode('');
+      dispatch(clearError());
+      Alert.alert('Succès', data.message || 'Abonnement activé ! Vous pouvez vous connecter.');
+    } catch (err: any) {
+      Alert.alert('Erreur', err.response?.data?.message || 'Code invalide');
+    } finally {
+      setActivationLoading(false);
+    }
   };
 
   const handleForgotPassword = async () => {
@@ -156,10 +180,20 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Forgot password */}
-          <TouchableOpacity style={styles.forgotBtn} onPress={() => setShowForgotModal(true)}>
-            <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
-          </TouchableOpacity>
+          {/* Forgot password + Activate */}
+          <View style={styles.bottomActions}>
+            <TouchableOpacity onPress={() => setShowForgotModal(true)}>
+              <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+            </TouchableOpacity>
+            {isAbonnementExpire && (
+              <TouchableOpacity
+                style={styles.activateBtn}
+                onPress={() => setShowActivationModal(true)}
+              >
+                <Text style={styles.activateBtnText}>Activer</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <Text style={styles.footerText}>
             Application sécurisée • Tous droits réservés
@@ -199,6 +233,46 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
             <TouchableOpacity style={styles.forgotCancel} onPress={() => { setShowForgotModal(false); setForgotPhone(''); setForgotPassword(''); }}>
+              <Text style={styles.forgotCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Activation Modal */}
+      <Modal visible={showActivationModal} transparent animationType="fade">
+        <View style={styles.forgotOverlay}>
+          <View style={styles.forgotCard}>
+            <Text style={styles.forgotTitle}>🔑 Activation</Text>
+            <Text style={styles.forgotSubtitle}>
+              Votre abonnement a expiré. Entrez un code d'activation pour continuer.
+            </Text>
+            <TextInput
+              style={styles.forgotInput}
+              placeholder="Code d'activation (ex: RESTO-XXXX-XXXX)"
+              placeholderTextColor={Colors.textLight}
+              autoCapitalize="characters"
+              value={activationCode}
+              onChangeText={setActivationCode}
+            />
+            <TouchableOpacity
+              style={[styles.forgotSubmit, activationLoading && { opacity: 0.6 }]}
+              onPress={handleActivateCode}
+              disabled={activationLoading}
+            >
+              {activationLoading ? (
+                <ActivityIndicator color={Colors.textWhite} />
+              ) : (
+                <Text style={styles.forgotSubmitText}>Activer l'abonnement</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.forgotCancel}
+              onPress={() => {
+                setShowActivationModal(false);
+                setActivationCode('');
+              }}
+            >
               <Text style={styles.forgotCancelText}>Annuler</Text>
             </TouchableOpacity>
           </View>
@@ -295,7 +369,7 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   errorIcon: {
     fontSize: 16,
@@ -310,6 +384,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.danger,
     padding: 4,
+  },
+  activateBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  activateBtnText: {
+    color: Colors.textWhite,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  bottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
   },
   inputGroup: {
     marginBottom: 16,
@@ -367,7 +458,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 20,
   },
-  forgotBtn: { alignItems: 'center', marginTop: 16 },
   forgotText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
   forgotOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   forgotCard: { backgroundColor: Colors.surface, borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 },

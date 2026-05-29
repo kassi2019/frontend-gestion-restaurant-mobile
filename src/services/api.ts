@@ -53,6 +53,16 @@ export const authApi = {
     api.post('/auth/photo', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  // Abonnement
+  getAbonnement: () => api.get('/auth/abonnement'),
+  activerCode: (data: { telephone: string; code: string }) => api.post('/auth/activer', data),
+  genererCodes: (data: { dureeJours: number; nombre: number }) =>
+    api.post('/auth/generer-codes', data),
+  listeCodes: () => api.get('/auth/codes'),
+  supprimerCode: (id: number) => api.delete(`/auth/codes/${id}`),
+  // Dashboard Super Admin
+  getDashboard: () => api.get('/auth/super-dashboard'),
+  getHistorique: (restaurantId: number) => api.get(`/auth/historique/${restaurantId}`),
 };
 
 export const menuApi = {

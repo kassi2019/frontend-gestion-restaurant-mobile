@@ -128,6 +128,17 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* Super Admin buttons */}
+      {user?.role === 'SUPER_ADMIN' && (
+        <TouchableOpacity
+          style={styles.restaurantBtn}
+          onPress={() => navigation.navigate('GenerateCodes')}
+        >
+          <Text style={styles.restaurantBtnText}>🔑 Générer des codes</Text>
+          <Text style={styles.restaurantBtnArrow}>›</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Restaurant Settings (Admin only) */}
       {user?.role === 'ADMIN' && (
         <TouchableOpacity
@@ -138,6 +149,7 @@ export default function ProfileScreen() {
           <Text style={styles.restaurantBtnArrow}>›</Text>
         </TouchableOpacity>
       )}
+
 
       {/* Change Password */}
       <View style={styles.pwdCard}>
