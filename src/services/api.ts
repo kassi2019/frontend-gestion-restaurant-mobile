@@ -75,10 +75,19 @@ export const menuApi = {
   updateMenu: (id: number, data: any) => api.patch(`/menu/${id}`, data),
   deleteMenu: (id: number) => api.delete(`/menu/${id}`),
   toggleDisponibilite: (id: number) => api.patch(`/menu/${id}/toggle`),
+  toggleDisponibleDemain: (id: number) => api.patch(`/menu/${id}/toggle-demain`),
   uploadImage: (id: number, formData: FormData) =>
     api.post(`/menu/${id}/image`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  importCsv: (formData: FormData) => api.post('/menu/import-csv', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  // Variants
+  getVariants: (menuId: number) => api.get(`/menu/${menuId}/variants`),
+  addVariant: (menuId: number, data: { nom: string; prix: number }) => api.post(`/menu/${menuId}/variants`, data),
+  updateVariant: (variantId: number, data: { nom?: string; prix?: number }) => api.patch(`/menu/variants/${variantId}`, data),
+  deleteVariant: (variantId: number) => api.delete(`/menu/variants/${variantId}`),
 };
 
 export const tablesApi = {

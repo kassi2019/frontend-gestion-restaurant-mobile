@@ -14,6 +14,7 @@ import {
   ScrollView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
@@ -58,6 +59,40 @@ export default function MenuScreen() {
   const [newCat, setNewCat] = useState({ nom: '', ordreService: '1', destination: 'CUISINE' });
   const [menuImage, setMenuImage] = useState<string | null>(null);
   const [editMenuImage, setEditMenuImage] = useState<string | null>(null);
+  // Variantes
+  const [showVariantModal, setShowVariantModal] = useState(false);
+  const [variantMenuId, setVariantMenuId] = useState<number>(0);
+  const [variantMenuName, setVariantMenuName] = useState('');
+  const [variantMenuVariants, setVariantMenuVariants] = useState<any[]>([]);
+  const [newVariant, setNewVariant] = useState({ nom: '', prix: '' });
+  const [variantLoading, setVariantLoading] = useState(false);
+  const [expandedVariants, setExpandedVariants] = useState<Set<number>>(new Set());
+
+  const handleImportCsv = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'text/*' });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const file = result.assets[0];
+      const formData = new FormData();
+      formData.append('file', { uri: file.uri, name: file.name, type: 'text/csv' } as any);
+
+      const { data } = await menuApi.importCsv(formData);
+      showToast.success(data.message || 'Import réussi');
+      loadData();
+    } catch (err: any) {
+      showToast.error(err.response?.data?.message || 'Erreur import');
+    }
+  };
+
+  const toggleVariants = (menuId: number) => {
+    setExpandedVariants(prev => {
+      const next = new Set(prev);
+      if (next.has(menuId)) next.delete(menuId);
+      else next.add(menuId);
+      return next;
+    });
+  };
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [viewerImageUri, setViewerImageUri] = useState('');
 
@@ -153,6 +188,43 @@ export default function MenuScreen() {
     }
   };
 
+  // ---- Variantes ----
+  const openVariants = (menu: any) => {
+    setVariantMenuId(menu.id);
+    setVariantMenuName(menu.nom);
+    setVariantMenuVariants(menu.variants || []);
+    setNewVariant({ nom: '', prix: '' });
+    setShowVariantModal(true);
+  };
+
+  const handleAddVariant = async () => {
+    if (!newVariant.nom || !newVariant.prix) { showToast.error('Nom et prix requis'); return; }
+    setVariantLoading(true);
+    try {
+      await menuApi.addVariant(variantMenuId, { nom: newVariant.nom, prix: parseFloat(newVariant.prix) });
+      showToast.success('Variante ajoutée');
+      setNewVariant({ nom: '', prix: '' });
+      const { data } = await menuApi.getVariants(variantMenuId);
+      setVariantMenuVariants(data || []);
+      loadData();
+    } catch (err: any) { showToast.error(err.response?.data?.message || 'Erreur'); }
+    finally { setVariantLoading(false); }
+  };
+
+  const handleDeleteVariant = async (variantId: number) => {
+    Alert.alert('Supprimer', 'Supprimer cette variante ?', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: async () => {
+        try {
+          await menuApi.deleteVariant(variantId);
+          showToast.success('Variante supprimée');
+          setVariantMenuVariants(prev => prev.filter(v => v.id !== variantId));
+          loadData();
+        } catch {}
+      }},
+    ]);
+  };
+
   const handleDeleteMenu = (item: any) => {
     Alert.alert('Supprimer', `Supprimer "${item.nom}" ?`, [
       { text: 'Annuler', style: 'cancel' },
@@ -224,9 +296,14 @@ export default function MenuScreen() {
           )}
         />
         {isManager && (
-          <TouchableOpacity style={styles.addBtn} onPress={() => setShowCatModal(true)}>
-            <Text style={styles.addBtnText}>+ Catégorie</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.importBtn} onPress={handleImportCsv}>
+              <Text style={styles.importBtnText}>📥</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addBtn} onPress={() => setShowCatModal(true)}>
+              <Text style={styles.addBtnText}>+ Catégorie</Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
 
@@ -236,31 +313,58 @@ export default function MenuScreen() {
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.menuCard}
-            onPress={() => { setSelectedMenu(item); if (isManager) setShowActionModal(true); }}
-            activeOpacity={isManager ? 0.7 : 1}
-          >
-            {item.image ? (
-              <TouchableOpacity onPress={() => { setViewerImageUri(SERVER_URL + item.image); setShowImageViewer(true); }}>
-                <Image source={{ uri: SERVER_URL + item.image }} style={styles.menuThumb} />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.menuThumbPlaceholder}><Text style={styles.menuThumbPlaceholderText}>🍽</Text></View>
-            )}
-            <View style={styles.menuInfo}>
-              <View style={styles.menuNameRow}>
-                <Text style={styles.menuName}>{item.nom}</Text>
-                <View style={[styles.availDot, { backgroundColor: item.disponibilite ? Colors.success : Colors.danger }]} />
+        renderItem={({ item }) => {
+          const hasVariants = item.variants?.length > 0;
+          const isExpanded = expandedVariants.has(item.id);
+          return (
+          <View>
+            <TouchableOpacity
+              style={styles.menuCard}
+              onPress={() => { setSelectedMenu(item); if (isManager) setShowActionModal(true); }}
+              activeOpacity={isManager ? 0.7 : 1}
+            >
+              {item.image ? (
+                <TouchableOpacity onPress={() => { setViewerImageUri(SERVER_URL + item.image); setShowImageViewer(true); }}>
+                  <Image source={{ uri: SERVER_URL + item.image }} style={styles.menuThumb} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.menuThumbPlaceholder}><Text style={styles.menuThumbPlaceholderText}>🍽</Text></View>
+              )}
+              <View style={styles.menuInfo}>
+                <View style={styles.menuNameRow}>
+                  <Text style={styles.menuName} numberOfLines={1}>{item.nom}</Text>
+                  {hasVariants && (
+                    <View style={styles.variantBadge}>
+                      <Text style={styles.variantBadgeText}>{item.variants.length}</Text>
+                    </View>
+                  )}
+                  <View style={[styles.availDot, { backgroundColor: item.disponibilite ? Colors.success : Colors.danger }]} />
+                </View>
+                <Text style={styles.menuCat}>{getCatName(item.categorieId)} • {item.tempsPreparation} min</Text>
               </View>
-              <Text style={styles.menuCat}>{getCatName(item.categorieId)} • {item.tempsPreparation} min</Text>
-            </View>
-            <View style={styles.menuRight}>
-              <Text style={styles.menuPrice}>{formatPrixDevise(item.prix, devise)}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
+              <View style={styles.menuRight}>
+                <Text style={styles.menuPrice}>{formatPrixDevise(item.prix, devise)}</Text>
+                {hasVariants && (
+                  <TouchableOpacity onPress={() => toggleVariants(item.id)} style={styles.expandArrow}>
+                    <Text style={styles.expandArrowText}>{isExpanded ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {/* Variantes déroulantes */}
+            {hasVariants && isExpanded && (
+              <View style={styles.variantDropdown}>
+                {item.variants.map((v: any) => (
+                  <View key={v.id} style={styles.variantDropdownItem}>
+                    <Text style={styles.variantDropdownName}>{v.nom}</Text>
+                    <Text style={styles.variantDropdownPrice}>{formatPrixDevise(v.prix, devise)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🍽</Text>
@@ -287,6 +391,21 @@ export default function MenuScreen() {
             onPress: () => {
               setShowActionModal(false);
               menuApi.toggleDisponibilite(selectedMenu?.id).then(() => { showToast.success('Disponibilité modifiée'); loadData(); });
+            },
+          },
+          {
+            icon: selectedMenu?.disponibleDemain === 0 ? '✅' : '❌',
+            label: selectedMenu?.disponibleDemain === 0 ? 'Pas disponible' : 'Disponible',
+            onPress: () => {
+              setShowActionModal(false);
+              menuApi.toggleDisponibleDemain(selectedMenu?.id).then(() => { showToast.success(selectedMenu?.disponibleDemain === 0 ? 'Marqué pas disponible' : 'Marqué disponible'); loadData(); });
+            },
+          },
+          {
+            icon: '📋', label: 'Variantes',
+            onPress: () => {
+              setShowActionModal(false);
+              openVariants(selectedMenu);
             },
           },
           {
@@ -339,9 +458,9 @@ export default function MenuScreen() {
                 )}
               </TouchableOpacity>
             </ScrollView>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAddModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleAddMenu}><Text style={styles.saveText}>Ajouter</Text></TouchableOpacity>
+            <View style={{ marginTop: 24 }}>
+              <TouchableOpacity style={styles.fullSaveBtn} onPress={handleAddMenu}><Text style={styles.saveText}>Ajouter le plat</Text></TouchableOpacity>
+              <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 8 }} onPress={() => setShowAddModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -392,9 +511,9 @@ export default function MenuScreen() {
                 )}
               </TouchableOpacity>
             </ScrollView>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleEditMenu}><Text style={styles.saveText}>Enregistrer</Text></TouchableOpacity>
+            <View style={{ marginTop: 24 }}>
+              <TouchableOpacity style={styles.fullSaveBtn} onPress={handleEditMenu}><Text style={styles.saveText}>Enregistrer</Text></TouchableOpacity>
+              <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 8 }} onPress={() => setShowEditModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -442,6 +561,68 @@ export default function MenuScreen() {
           <Image source={{ uri: viewerImageUri }} style={styles.viewerImage} resizeMode="contain" />
         </View>
       </Modal>
+
+      {/* Variantes Modal */}
+      <Modal visible={showVariantModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>📋 Variantes — {variantMenuName}</Text>
+              <TouchableOpacity onPress={() => setShowVariantModal(false)} style={styles.modalClose}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Variantes existantes */}
+            {variantMenuVariants.length > 0 ? (
+              variantMenuVariants.map((v: any) => (
+                <View key={v.id} style={styles.variantItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.variantName}>{v.nom}</Text>
+                    <Text style={styles.variantPrice}>{formatPrixDevise(v.prix, devise)}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => handleDeleteVariant(v.id)} style={styles.variantDeleteBtn}>
+                    <Text style={styles.variantDeleteText}>🗑</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <Text style={{ color: Colors.textLight, textAlign: 'center', paddingVertical: 20 }}>Aucune variante</Text>
+            )}
+
+            {/* Ajouter une variante */}
+            <View style={{ borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 16, marginTop: 8 }}>
+              <Text style={{ fontWeight: '700', color: Colors.text, marginBottom: 12 }}>+ Ajouter une variante</Text>
+              <TextInput
+                style={styles.field}
+                placeholder="Nom (ex: Avec alcool)"
+                value={newVariant.nom}
+                onChangeText={(t) => setNewVariant({ ...newVariant, nom: t })}
+                placeholderTextColor={Colors.textLight}
+              />
+              <TextInput
+                style={styles.field}
+                placeholder={`Prix (${devise})`}
+                keyboardType="decimal-pad"
+                value={newVariant.prix}
+                onChangeText={(t) => setNewVariant({ ...newVariant, prix: t })}
+                placeholderTextColor={Colors.textLight}
+              />
+              <TouchableOpacity
+                style={[styles.fullSaveBtn, variantLoading && { opacity: 0.6 }]}
+                onPress={handleAddVariant}
+                disabled={variantLoading}
+              >
+                {variantLoading ? (
+                  <ActivityIndicator color={Colors.textWhite} />
+                ) : (
+                  <Text style={styles.saveText}>Ajouter la variante</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -457,6 +638,11 @@ const styles = StyleSheet.create({
   filterTextActive: { color: Colors.textWhite, fontWeight: '700' },
   addBtn: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.success, marginRight: 8 },
   addBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 13 },
+  importBtn: {
+    backgroundColor: Colors.success, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
+    justifyContent: 'center', alignItems: 'center', marginRight: 6,
+  },
+  importBtnText: { fontSize: 18 },
   list: { padding: 12, paddingBottom: 80 },
   menuCard: {
     backgroundColor: Colors.surface, borderRadius: 14, padding: 10, marginBottom: 8,
@@ -508,6 +694,7 @@ const styles = StyleSheet.create({
   cancelText: { color: Colors.textLight, fontWeight: '600', fontSize: 15 },
   saveBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, backgroundColor: Colors.primary, alignItems: 'center' },
   saveText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
+  fullSaveBtn: { borderRadius: 14, paddingVertical: 14, backgroundColor: Colors.primary, alignItems: 'center', width: '100%' },
   imageBtn: {
     backgroundColor: Colors.inputBg, borderRadius: 12, borderWidth: 1,
     borderColor: Colors.border, borderStyle: 'dashed',
@@ -524,4 +711,33 @@ const styles = StyleSheet.create({
   viewerCloseBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
   viewerCloseText: { color: Colors.textWhite, fontSize: 20, fontWeight: '700' },
   viewerImage: { width: '100%', height: '70%' },
+  // Variantes
+  variantItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 12,
+    backgroundColor: Colors.inputBg, borderRadius: 12, marginBottom: 6,
+  },
+  variantName: { fontSize: 14, fontWeight: '600', color: Colors.text },
+  variantPrice: { fontSize: 14, fontWeight: '700', color: Colors.primary, marginTop: 2 },
+  variantDeleteBtn: { padding: 8 },
+  variantDeleteText: { fontSize: 18 },
+  // Variantes inline
+  variantBadge: {
+    backgroundColor: Colors.primary, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2,
+    marginRight: 6,
+  },
+  variantBadgeText: { color: Colors.textWhite, fontSize: 10, fontWeight: '800' },
+  expandArrow: { padding: 6 },
+  expandArrowText: { fontSize: 12, color: Colors.textLight },
+  variantDropdown: {
+    backgroundColor: Colors.inputBg, marginHorizontal: 12, marginTop: -6, marginBottom: 8,
+    borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1, borderColor: Colors.border, borderTopWidth: 0,
+  },
+  variantDropdownItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#E0E0E0',
+  },
+  variantDropdownName: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  variantDropdownPrice: { fontSize: 14, fontWeight: '700', color: Colors.primary },
 });

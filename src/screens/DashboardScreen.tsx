@@ -87,8 +87,8 @@ export default function DashboardScreen() {
   const [nbAPayer, setNbAPayer] = useState(0);
   const [aPayerCommandes, setAPayerCommandes] = useState<any[]>([]);
   const [facturesList, setFacturesList] = useState<any[]>([]);
-  const [cashierDetail, setCashierDetail] = useState<'apayer' | 'factures' | null>(null);
-  const [showCashierModal, setShowCashierModal] = useState(false);
+  const [cashierDetail, setCashierDetail] = useState<'apayer' | 'factures' | 'clotures' | null>(null);
+  const [cloturesList, setCloturesList] = useState<any[]>([]);
 
   // Bar data
   const [barOrders, setBarOrders] = useState<any[]>([]);
@@ -339,6 +339,8 @@ export default function DashboardScreen() {
     { icon: '👥', label: 'Utilisateurs', screen: 'Users', color: '#16A085', roles: ['ADMIN', 'MANAGER'] },
     { icon: '💳', label: 'Caisse', screen: 'Cashier', color: '#C0392B', roles: ['ADMIN', 'MANAGER', 'CAISSIER'] },
     { icon: '📊', label: 'Statistiques', screen: 'Stats', color: '#2ECC71', roles: ['ADMIN', 'MANAGER'] },
+    { icon: '⭐', label: 'Abonnement', screen: 'RestaurantSettings', color: '#9333EA', roles: ['ADMIN'] },
+    { icon: '🔒', label: 'Clôture', screen: 'RestaurantSettings', color: '#EF4444', roles: ['ADMIN'] },
     { icon: '🔔', label: 'Notifications', screen: 'Notifications', color: '#E67E22', badge: unreadNotifs, roles: ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   ];
 
@@ -392,7 +394,7 @@ export default function DashboardScreen() {
       }
     };
 
-    const openCashierModal = async (type: 'apayer' | 'factures') => {
+    const openCashierModal = async (type: 'apayer' | 'factures' | 'clotures') => {
       setCashierDetail(type);
       setShowCashierModal(true);
       if (type === 'apayer') {
@@ -409,6 +411,13 @@ export default function DashboardScreen() {
           const list = Array.isArray(data) ? data : [];
           setFacturesList(list);
         } catch (err) { setFacturesList([]); }
+      }
+      if (type === 'clotures') {
+        try {
+          const { data } = await paiementApi.getHistoriqueClotures();
+          const list = Array.isArray(data) ? data : [];
+          setCloturesList(list);
+        } catch (err) { setCloturesList([]); }
       }
     };
 
@@ -542,6 +551,15 @@ export default function DashboardScreen() {
             <Text style={styles.cashierStatLabel}>Non lues</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={[styles.clotureCard, { marginTop: 8 }]}
+          onPress={() => openCashierModal('clotures')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.clotureCardIcon}>📋</Text>
+          <Text style={styles.clotureCardText}>Historique des clôtures</Text>
+          <Text style={{ color: Colors.primary, fontSize: 18 }}>›</Text>
+        </TouchableOpacity>
 
         {/* Acces Rapide */}
         <Text style={styles.sectionTitle}>Acces Rapide</Text>
@@ -572,7 +590,7 @@ export default function DashboardScreen() {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>
-                  {cashierDetail === 'apayer' ? `A payer (${commandesAPayerGroup.length} tables)` : `Factures du jour (${facturesList.length})`}
+                  {cashierDetail === 'apayer' ? `A payer (${commandesAPayerGroup.length} tables)` : cashierDetail === 'factures' ? `Factures du jour (${facturesList.length})` : `Clôtures (${cloturesList.length})`}
                 </Text>
                 <TouchableOpacity onPress={() => setShowCashierModal(false)} style={styles.modalClose}>
                   <Text style={styles.modalCloseText}>✕</Text>
@@ -641,6 +659,48 @@ export default function DashboardScreen() {
                         </View>
                       );
                     }}
+                    style={styles.detailList}
+                  />
+                )
+              ) : cashierDetail === 'clotures' ? (
+                cloturesList.length === 0 ? (
+                  <View style={styles.emptyDetail}>
+                    <Text style={styles.emptyDetailIcon}>📋</Text>
+                    <Text style={styles.emptyDetailText}>Aucune clôture</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={cloturesList}
+                    keyExtractor={(item) => String(item.id)}
+                    renderItem={({ item }) => (
+                      <View style={styles.clotureItem}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
+                              {new Date(item.dateCloture).toLocaleString('fr-FR')}
+                            </Text>
+                            <Text style={{
+                              fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8,
+                              backgroundColor: item.type === 'GLOBAL' ? Colors.danger + '15' : Colors.primary + '15',
+                              color: item.type === 'GLOBAL' ? Colors.danger : Colors.primary,
+                            }}>
+                              {item.type === 'GLOBAL' ? 'Globale' : 'Caissier'}
+                            </Text>
+                          </View>
+                          <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 2 }}>
+                            {item.caissier?.nom || '—'} · {item.nbFactures} facture(s)
+                          </Text>
+                          <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
+                            <Text style={{ fontSize: 11, color: Colors.success }}>💵 {formatPrixDevise(item.totalEspeces, devise)}</Text>
+                            <Text style={{ fontSize: 11, color: Colors.primary }}>📱 {formatPrixDevise(item.totalMobile, devise)}</Text>
+                            <Text style={{ fontSize: 11, color: Colors.accent }}>💳 {formatPrixDevise(item.totalCarte, devise)}</Text>
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.success }}>
+                          {formatPrixDevise(item.totalGeneral, devise)}
+                        </Text>
+                      </View>
+                    )}
                     style={styles.detailList}
                   />
                 )
@@ -1454,14 +1514,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10 },
-  statCardWrapper: { width: '30%', margin: '1.6%' },
+  statCardWrapper: { width: '22%', margin: '1.5%' },
   menuGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 10, marginBottom: 40 },
   menuItem: {
-    width: '30%',
+    width: '22%',
     backgroundColor: Colors.surface,
     borderRadius: 18,
-    padding: 14,
-    margin: '1.6%',
+    padding: 10,
+    margin: '1.5%',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
@@ -1472,11 +1532,11 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   menuIconBox: {
-    width: 48, height: 48, borderRadius: 16,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+    width: 40, height: 40, borderRadius: 14,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 6,
   },
-  menuIcon: { fontSize: 22 },
-  menuLabel: { fontSize: 11, fontWeight: '700', color: Colors.text, textAlign: 'center' },
+  menuIcon: { fontSize: 18 },
+  menuLabel: { fontSize: 10, fontWeight: '700', color: Colors.text, textAlign: 'center' },
   menuBadge: {
     position: 'absolute', top: -2, right: -2,
     minWidth: 18, height: 18, borderRadius: 9,
@@ -1715,4 +1775,17 @@ const styles = StyleSheet.create({
   printBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
   closeReceiptBtn: { backgroundColor: Colors.inputBg, borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 8 },
   closeReceiptText: { color: Colors.textLight, fontWeight: '600', fontSize: 14 },
+  // Clôtures
+  clotureCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: Colors.surface, marginHorizontal: 12, borderRadius: 16,
+    padding: 16, borderWidth: 1, borderColor: Colors.border,
+  },
+  clotureCardIcon: { fontSize: 20 },
+  clotureCardText: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.text },
+  clotureItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.surface, borderRadius: 12, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: Colors.border,
+  },
 });
