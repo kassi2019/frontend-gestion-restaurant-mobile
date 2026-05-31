@@ -346,11 +346,13 @@ export default function DashboardScreen() {
 
   const filteredMenu = menuItems.filter((item) => item.roles.includes(user?.role || ''));
 
+  // States pour le cashier (déplacés ici pour respecter les règles des hooks)
+  const [searchCmd, setSearchCmd] = useState('');
+  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searching, setSearching] = useState(false);
+
   // ============ CASHIER DASHBOARD ============
   if (isCaissier) {
-    const [searchCmd, setSearchCmd] = useState('');
-    const [searchResult, setSearchResult] = useState<any>(null);
-    const [searching, setSearching] = useState(false);
 
     const handleSearchCmd = async () => {
       const term = searchCmd.trim();

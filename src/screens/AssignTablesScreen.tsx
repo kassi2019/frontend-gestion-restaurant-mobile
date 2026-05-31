@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   checkMark: { color: Colors.textWhite, fontSize: 14, fontWeight: '700' },
   tableNum: { fontSize: 16, fontWeight: '600', color: Colors.text, flex: 1 },
   statusDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
-  tableStatut: { fontSize: 12, color: Colors.textLight },
+  tableStatut: { fontSize: 12, color: Colors.textLight, minWidth: 60, flexShrink: 0 },
   placeholderText: { fontSize: 16, color: Colors.textLight, marginTop: 40 },
 
   // Footer

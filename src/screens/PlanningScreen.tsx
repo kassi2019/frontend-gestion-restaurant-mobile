@@ -541,6 +541,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.surface, borderRadius: 16, padding: 16, marginBottom: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
+    overflow: 'visible',
   },
   dateBox: { marginBottom: 12 },
   dateText: { fontSize: 16, fontWeight: '700', color: Colors.text, textTransform: 'capitalize' },

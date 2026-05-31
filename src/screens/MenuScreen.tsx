@@ -295,17 +295,25 @@ export default function MenuScreen() {
             </TouchableOpacity>
           )}
         />
-        {isManager && (
-          <>
-            <TouchableOpacity style={styles.importBtn} onPress={handleImportCsv}>
-              <Text style={styles.importBtnText}>📥</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addBtn} onPress={() => setShowCatModal(true)}>
-              <Text style={styles.addBtnText}>+ Catégorie</Text>
-            </TouchableOpacity>
-          </>
-        )}
       </View>
+
+      {/* Toolbar Admin */}
+      {isManager && (
+        <View style={styles.toolbar}>
+          <TouchableOpacity style={styles.toolbarBtn} onPress={() => { setNewMenu({ nom: '', prix: '', categorieId: categories[0]?.id || 0 }); setShowAddModal(true); }}>
+            <Text style={styles.toolbarBtnIcon}>➕</Text>
+            <Text style={styles.toolbarBtnText}>Ajouter un plat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.toolbarBtn, styles.toolbarBtnOutline]} onPress={() => setShowCatModal(true)}>
+            <Text style={styles.toolbarBtnIconGray}>📂</Text>
+            <Text style={styles.toolbarBtnTextGray}>Catégorie</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.toolbarBtn, styles.toolbarBtnImport]} onPress={handleImportCsv}>
+            <Text style={styles.toolbarBtnIconGreen}>📥</Text>
+            <Text style={styles.toolbarBtnTextGreen}>Importer CSV</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Menu list */}
       <FlatList
@@ -332,7 +340,7 @@ export default function MenuScreen() {
               )}
               <View style={styles.menuInfo}>
                 <View style={styles.menuNameRow}>
-                  <Text style={styles.menuName} numberOfLines={1}>{item.nom}</Text>
+                  <Text style={styles.menuName} numberOfLines={2}>{item.nom}</Text>
                   {hasVariants && (
                     <View style={styles.variantBadge}>
                       <Text style={styles.variantBadgeText}>{item.variants.length}</Text>
@@ -373,11 +381,6 @@ export default function MenuScreen() {
         }
       />
 
-      {isManager && (
-        <TouchableOpacity style={styles.fab} onPress={() => { setNewMenu({ nom: '', prix: '', categorieId: categories[0]?.id || 0 }); setShowAddModal(true); }}>
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      )}
 
       {/* Action Sheet */}
       <ActionSheet
@@ -638,11 +641,25 @@ const styles = StyleSheet.create({
   filterTextActive: { color: Colors.textWhite, fontWeight: '700' },
   addBtn: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.success, marginRight: 8 },
   addBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 13 },
-  importBtn: {
-    backgroundColor: Colors.success, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
-    justifyContent: 'center', alignItems: 'center', marginRight: 6,
+  toolbar: {
+    flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 8,
   },
-  importBtnText: { fontSize: 18 },
+  toolbarBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 8, gap: 4,
+  },
+  toolbarBtnOutline: {
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+  },
+  toolbarBtnImport: {
+    backgroundColor: '#16A34A15', borderWidth: 1, borderColor: '#16A34A30',
+  },
+  toolbarBtnIcon: { fontSize: 14, color: Colors.textWhite },
+  toolbarBtnIconGray: { fontSize: 14 },
+  toolbarBtnIconGreen: { fontSize: 14 },
+  toolbarBtnText: { fontSize: 11, fontWeight: '700', color: Colors.textWhite },
+  toolbarBtnTextGray: { fontSize: 11, fontWeight: '600', color: Colors.text },
+  toolbarBtnTextGreen: { fontSize: 11, fontWeight: '600', color: '#16A34A' },
   list: { padding: 12, paddingBottom: 80 },
   menuCard: {
     backgroundColor: Colors.surface, borderRadius: 14, padding: 10, marginBottom: 8,
