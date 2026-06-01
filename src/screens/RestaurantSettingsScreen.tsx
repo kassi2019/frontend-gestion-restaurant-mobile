@@ -18,7 +18,7 @@ import { showToast } from '../services/toast';
 import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 const MENUS = [
-  { key: 'infos',   icon: '🏪', label: 'Informations du restaurant' },
+  { key: 'infos',   icon: '🏪', label: 'Info du restaurant' },
   { key: 'abonnement', icon: '⭐', label: 'Abonnement' },
   { key: 'cloture', icon: '🔒', label: 'Clôture Globale' },
 ];
@@ -223,7 +223,7 @@ export default function RestaurantSettingsScreen() {
             <Text style={styles.label}>Téléphone</Text>
             <TextInput style={styles.input} value={telephone} onChangeText={setTelephone} placeholder="Ex: +243990000000" placeholderTextColor={Colors.textLight} keyboardType="phone-pad" />
 
-            <Text style={styles.label}>Devise (€, FC, $)</Text>
+            <Text style={styles.label}>Devise (€, Fcfa, $)</Text>
             <TextInput style={styles.input} value={devise} onChangeText={setDevise} placeholder="Ex: €, FC, $" placeholderTextColor={Colors.textLight} maxLength={10} />
 
             <TouchableOpacity style={[styles.saveBtn, loading && { opacity: 0.6 }]} onPress={handleSave} disabled={loading}>

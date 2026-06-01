@@ -22,6 +22,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import RestaurantSettingsScreen from '../screens/RestaurantSettingsScreen';
 import AssignTablesScreen from '../screens/AssignTablesScreen';
+import StockScreen from '../screens/StockScreen';
 import GenerateCodesScreen from '../screens/GenerateCodesScreen';
 import DashboardAdminScreen from '../screens/DashboardAdminScreen';
 import HistoriqueAbonnementScreen from '../screens/HistoriqueAbonnementScreen';
@@ -163,6 +164,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, headerTitle: 'Mon Profil', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="RestaurantSettings" component={RestaurantSettingsScreen} options={{ headerShown: true, headerTitle: 'Paramètres Restaurant', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="AssignTables" component={AssignTablesScreen} options={{ headerShown: true, headerTitle: 'Affecter les tables', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen name="Stock" component={StockScreen} options={{ headerShown: true, headerTitle: '📦 Gestion de Stock', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="GenerateCodes" component={GenerateCodesScreen} options={{ headerShown: true, headerTitle: 'Générer des codes', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="DashboardAdmin" component={DashboardAdminScreen} options={{ headerShown: true, headerTitle: 'Tableau de bord', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="HistoriqueAbonnement" component={HistoriqueAbonnementScreen} options={{ headerShown: true, headerTitle: 'Historique abonnement', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />

@@ -225,6 +225,34 @@ export default function AssignTablesScreen() {
                       <Text style={styles.tableNum}>{t.numero}</Text>
                       <View style={[styles.statusDot, { backgroundColor: t.statut === 'LIBRE' ? Colors.success : t.statut === 'OCCUPEE' ? Colors.danger : Colors.warning }]} />
                       <Text style={styles.tableStatut}>{t.statut}</Text>
+                      {t.serveurId && t.serveur && (
+                        <TouchableOpacity
+                          style={styles.unassignBtn}
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            Alert.alert(
+                              'Désassigner',
+                              `Retirer ${t.serveur?.nom} de la table ${t.numero} ?`,
+                              [
+                                { text: 'Annuler', style: 'cancel' },
+                                { text: 'Désassigner', style: 'destructive', onPress: async () => {
+                                  try {
+                                    await serveurTablesApi.unassign(t.id);
+                                    setCheckedTableIds(prev => { const next = new Set(prev); next.delete(t.id); return next; });
+                                    showToast.success(`Table ${t.numero} désassignée`);
+                                    loadData();
+                                  } catch { showToast.error('Erreur'); }
+                                }},
+                              ],
+                            );
+                          }}
+                        >
+                          <Text style={styles.unassignText}>✕</Text>
+                        </TouchableOpacity>
+                      )}
+                      {t.serveurId && t.serveur && (
+                        <Text style={styles.serveurAssigned} numberOfLines={1}>{t.serveur?.nom}</Text>
+                      )}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -399,6 +427,12 @@ const styles = StyleSheet.create({
   tableNum: { fontSize: 16, fontWeight: '600', color: Colors.text, flex: 1 },
   statusDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
   tableStatut: { fontSize: 12, color: Colors.textLight, minWidth: 60, flexShrink: 0 },
+  unassignBtn: {
+    padding: 4, marginLeft: 6, backgroundColor: Colors.danger + '15', borderRadius: 10,
+    width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
+  },
+  unassignText: { fontSize: 12, color: Colors.danger, fontWeight: '700' },
+  serveurAssigned: { fontSize: 9, color: Colors.primary, fontWeight: '600', marginLeft: 4, maxWidth: 60 },
   placeholderText: { fontSize: 16, color: Colors.textLight, marginTop: 40 },
 
   // Footer

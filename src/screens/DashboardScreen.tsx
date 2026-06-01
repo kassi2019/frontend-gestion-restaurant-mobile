@@ -341,15 +341,30 @@ export default function DashboardScreen() {
     { icon: '📊', label: 'Statistiques', screen: 'Stats', color: '#2ECC71', roles: ['ADMIN', 'MANAGER'] },
     { icon: '⭐', label: 'Abonnement', screen: 'RestaurantSettings', color: '#9333EA', roles: ['ADMIN'] },
     { icon: '🔒', label: 'Clôture', screen: 'RestaurantSettings', color: '#EF4444', roles: ['ADMIN'] },
+    { icon: '📦', label: 'Stock', screen: 'Stock', color: '#16A34A', roles: ['ADMIN', 'MANAGER'] },
     { icon: '🔔', label: 'Notifications', screen: 'Notifications', color: '#E67E22', badge: unreadNotifs, roles: ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   ];
 
-  const filteredMenu = menuItems.filter((item) => item.roles.includes(user?.role || ''));
+  // Utiliser les modules dynamiques de l'utilisateur, sinon fallback sur menuItems
+  const routeToScreen: Record<string, string> = {
+    '/': 'Accueil', '/tables': 'Tables', '/assign-tables': 'AssignTables',
+    '/commandes': 'Commandes', '/menu': 'Menu', '/planning': 'Planning',
+    '/caisse': 'Cashier', '/users': 'Users', '/notifications': 'Notifications',
+    '/stats': 'Stats', '/parametres': 'RestaurantSettings',
+    '/abonnement': 'RestaurantSettings', '/super/codes': 'GenerateCodes',
+    '/stock': 'Stock',
+  };
+  const dynamicMenu = user?.modules?.length ? user.modules.map(m => ({
+    icon: m.icon, label: m.nom, screen: routeToScreen[m.route] || m.route.replace('/', '') || 'Main',
+    color: '#3498DB', roles: ['*'], badge: m.route === '/notifications' ? unreadNotifs : undefined,
+  })) : menuItems;
+  const filteredMenu = dynamicMenu.filter((item) => item.roles.includes('*') || item.roles.includes(user?.role || ''));
 
   // States pour le cashier (déplacés ici pour respecter les règles des hooks)
   const [searchCmd, setSearchCmd] = useState('');
   const [searchResult, setSearchResult] = useState<any>(null);
   const [searching, setSearching] = useState(false);
+  const [showCashierModal, setShowCashierModal] = useState(false);
 
   // ============ CASHIER DASHBOARD ============
   if (isCaissier) {
@@ -1094,28 +1109,29 @@ export default function DashboardScreen() {
     );
   }
 
+  // useMemo pour la cuisine (déplacé ici pour respecter les règles des hooks)
+  const commandesParTableCuisine = useMemo(() => {
+    if (!isCuisine) return [];
+    const maintenant = Date.now();
+    const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number; passeeDepuis: number }> = {};
+    for (const cmd of cuisineOrders) {
+      const tId = cmd.tableId || cmd.table?.id;
+      if (!tId) continue;
+      const numero = cmd.table?.numero || `Table ${tId}`;
+      if (!grouped[tId]) {
+        const dateCmd = new Date(cmd.dateCommande).getTime();
+        grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0, passeeDepuis: Math.floor((maintenant - dateCmd) / 60000) };
+      }
+      grouped[tId].commandes.push(cmd);
+      grouped[tId].total += totalDetails(cmd);
+    }
+    const liste = Object.values(grouped);
+    liste.sort((a, b) => b.passeeDepuis - a.passeeDepuis);
+    return liste;
+  }, [cuisineOrders, isCuisine]);
+
   // ============ CUISINE DASHBOARD ============
   if (isCuisine) {
-    const maintenant = Date.now();
-
-    const commandesParTableCuisine = useMemo(() => {
-      const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number; passeeDepuis: number }> = {};
-      for (const cmd of cuisineOrders) {
-        const tId = cmd.tableId || cmd.table?.id;
-        if (!tId) continue;
-        const numero = cmd.table?.numero || `Table ${tId}`;
-        if (!grouped[tId]) {
-          const dateCmd = new Date(cmd.dateCommande).getTime();
-          grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0, passeeDepuis: Math.floor((maintenant - dateCmd) / 60000) };
-        }
-        grouped[tId].commandes.push(cmd);
-        grouped[tId].total += totalDetails(cmd);
-      }
-      // Trier par temps d'attente (le plus ancien d'abord = FIFO)
-      const liste = Object.values(grouped);
-      liste.sort((a, b) => b.passeeDepuis - a.passeeDepuis);
-      return liste;
-    }, [cuisineOrders]);
 
     const nbEnPreparation = cuisineOrders.filter((c: any) => c.statut === 'EN_PREPARATION').length;
     const nbPretes = cuisineOrders.filter((c: any) => c.statut === 'PRETE').length;

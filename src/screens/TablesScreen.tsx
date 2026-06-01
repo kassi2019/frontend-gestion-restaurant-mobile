@@ -249,11 +249,11 @@ export default function TablesScreen() {
             activeOpacity={0.7}
           >
             <View style={[styles.statusDot, { backgroundColor: STATUT_COLORS[item.statut] }]} />
-            <Text style={styles.tableNum}>Table {item.numero}</Text>
-            <Text style={styles.zone}>{item.zone}</Text>
+            <Text style={styles.tableNum} numberOfLines={1}>Table {item.numero}</Text>
+            <Text style={styles.zone} numberOfLines={1}>{item.zone}</Text>
             <View style={[styles.statutBadge, { backgroundColor: STATUT_COLORS[item.statut] + '18' }]}>
-              <Text style={[styles.statutText, { color: STATUT_COLORS[item.statut] }]}>
-                {item.statut === 'LIBRE' ? 'Libre' : item.statut === 'OCCUPEE' ? 'Occupée' : 'Réservée'}
+              <Text style={[styles.statutText, { color: STATUT_COLORS[item.statut] }]} numberOfLines={1}>
+                {item.statut === 'LIBRE' ? 'Libre' : item.statut === 'OCCUPEE' ? 'Occup.' : 'Réserv.'}
               </Text>
             </View>
             {item.serveur && (
@@ -457,15 +457,16 @@ const styles = StyleSheet.create({
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 12, paddingBottom: 80 },
   card: {
-    flex: 1, backgroundColor: Colors.surface, borderRadius: 16, padding: 16, margin: 6,
-    alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    flex: 1, backgroundColor: Colors.surface, borderRadius: 14, padding: 10, margin: 5, minWidth: 0,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
   },
-  statusDot: { width: 12, height: 12, borderRadius: 6, position: 'absolute', top: 10, right: 10 },
-  tableNum: { fontSize: 18, fontWeight: '700', color: Colors.text, marginTop: 8 },
-  zone: { fontSize: 13, color: Colors.textLight, marginTop: 4 },
-  statutBadge: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginTop: 10 },
-  statutText: { fontSize: 12, fontWeight: '600' },
+  statusDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', top: 8, right: 8 },
+  tableNum: { fontSize: 14, fontWeight: '700', color: Colors.text, marginTop: 8, textAlign: 'center' },
+  zone: { fontSize: 11, color: Colors.textLight, marginTop: 3, textAlign: 'center' },
+  statutBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2, marginTop: 6, alignSelf: 'center' },
+  statutText: { fontSize: 10, fontWeight: '600' },
   serveur: { fontSize: 12, color: Colors.textLight, marginTop: 8 },
   fab: {
     position: 'absolute', bottom: 20, right: 20, width: 56, height: 56, borderRadius: 28,

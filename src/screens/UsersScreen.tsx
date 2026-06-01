@@ -14,7 +14,7 @@ import {
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { Colors } from '../theme/colors';
-import { usersApi, authApi } from '../services/api';
+import { usersApi, authApi, menuApi } from '../services/api';
 import { showToast } from '../services/toast';
 import ActionSheet from '../components/ActionSheet';
 import ModalPicker from '../components/ModalPicker';
@@ -60,6 +60,10 @@ export default function UsersScreen() {
   const [showRoleEditPicker, setShowRoleEditPicker] = useState(false);
   const [createForm, setCreateForm] = useState({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' });
   const [editForm, setEditForm] = useState({ id: 0, nom: '', telephone: '', role: '', mot_de_passe: '' });
+  const [showModulesModal, setShowModulesModal] = useState(false);
+  const [availableModules, setAvailableModules] = useState<any[]>([]);
+  const [selectedModuleIds, setSelectedModuleIds] = useState<Set<number>>(new Set());
+  const [editingUserModules, setEditingUserModules] = useState<any>(null);
 
   const loadUsers = async () => {
     try {
@@ -82,6 +86,32 @@ export default function UsersScreen() {
     setRefreshing(false);
   };
 
+  const openModulesEdit = async (u: any) => {
+    setEditingUserModules(u);
+    try {
+      let { data } = await authApi.getModules();
+      // SUPER_ADMIN uniquement peut voir/assigner "Générer codes"
+      if (user?.role !== 'SUPER_ADMIN') {
+        data = (data || []).filter((m: any) => m.route !== '/super/codes');
+      }
+      setAvailableModules(data || []);
+      // Précharger les modules existants (userModules chargés par l'API)
+      const mods: number[] = u.userModules?.map((um: any) => um.module?.id).filter(Boolean) || [];
+      setSelectedModuleIds(new Set(mods));
+    } catch {}
+    setShowModulesModal(true);
+  };
+
+  const handleSaveModules = async () => {
+    if (!editingUserModules) return;
+    try {
+      await authApi.updateUserModules(editingUserModules.id, Array.from(selectedModuleIds));
+      showToast.success('Modules mis à jour');
+      setShowModulesModal(false);
+      loadUsers();
+    } catch { showToast.error('Erreur'); }
+  };
+
   const handleCreate = async () => {
     if (!createForm.nom || !createForm.telephone || !createForm.mot_de_passe) {
       return Alert.alert('Erreur', 'Remplissez tous les champs');
@@ -93,6 +123,7 @@ export default function UsersScreen() {
         mot_de_passe: createForm.mot_de_passe,
         role: createForm.role,
         restaurantId: user!.restaurantId,
+        moduleIds: Array.from(selectedModuleIds),
       });
       setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' });
       showToast.success(`Utilisateur "${createForm.nom}" créé`);
@@ -193,7 +224,7 @@ export default function UsersScreen() {
       />
 
       {isManager && (
-        <TouchableOpacity style={styles.fab} onPress={() => { setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' }); setShowCreateModal(true); }}>
+        <TouchableOpacity style={styles.fab} onPress={async () => { setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' }); setSelectedModuleIds(new Set()); try { const { data } = await authApi.getModules(); setAvailableModules(data || []); } catch {} setShowCreateModal(true); }}>
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
       )}
@@ -204,6 +235,13 @@ export default function UsersScreen() {
         title={selectedUser?.nom}
         subtitle={`${ROLE_LABELS[selectedUser?.role] || ''} • ${selectedUser?.telephone || ''}`}
         actions={[
+          {
+            icon: '🧩', label: 'Modules',
+            onPress: () => {
+              setShowActionModal(false);
+              setTimeout(() => openModulesEdit(selectedUser), 300);
+            },
+          },
           {
             icon: '✏️', label: 'Modifier',
             onPress: () => {
@@ -246,6 +284,33 @@ export default function UsersScreen() {
               <Text style={styles.selectFieldText}>{ROLE_LABELS[createForm.role]}</Text>
               <Text style={styles.selectFieldIcon}>▼</Text>
             </TouchableOpacity>
+            {/* Modules */}
+            {availableModules.length > 0 && (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 12 }]}>🧩 Modules</Text>
+                <View style={styles.moduleGrid}>
+                  {availableModules.map((m: any) => {
+                    const checked = selectedModuleIds.has(m.id);
+                    return (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={[styles.moduleChip, checked && styles.moduleChipActive]}
+                        onPress={() => {
+                          setSelectedModuleIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        <Text style={styles.moduleChipIcon}>{m.icon}</Text>
+                        <Text style={[styles.moduleChipText, checked && styles.moduleChipTextActive]} numberOfLines={1}>{m.nom}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
@@ -295,6 +360,49 @@ export default function UsersScreen() {
           onSelect={(value) => setEditForm({ ...editForm, role: value })}
           onClose={() => setShowRoleEditPicker(false)}
         />
+      </Modal>
+
+      {/* Modal Modules */}
+      <Modal visible={showModulesModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>🧩 Modules — {editingUserModules?.nom}</Text>
+              <TouchableOpacity onPress={() => setShowModulesModal(false)} style={styles.modalClose}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.moduleGrid}>
+              {availableModules.map((m: any) => {
+                const checked = selectedModuleIds.has(m.id);
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    style={[styles.moduleChip, checked && styles.moduleChipActive]}
+                    onPress={() => {
+                      setSelectedModuleIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(m.id)) next.delete(m.id); else next.add(m.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    <Text style={styles.moduleChipIcon}>{m.icon}</Text>
+                    <Text style={[styles.moduleChipText, checked && styles.moduleChipTextActive]} numberOfLines={1}>{m.nom}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={{ marginTop: 16 }}>
+              <TouchableOpacity style={styles.fullBtn} onPress={handleSaveModules}>
+                <Text style={styles.saveText}>Enregistrer les modules</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 8 }} onPress={() => setShowModulesModal(false)}>
+                <Text style={styles.cancelText}>Annuler</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -351,4 +459,15 @@ const styles = StyleSheet.create({
   cancelText: { color: Colors.textLight, fontWeight: '600', fontSize: 15 },
   saveBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, backgroundColor: Colors.primary, alignItems: 'center' },
   saveText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
+  moduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 8 },
+  moduleChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6,
+    backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border,
+  },
+  moduleChipActive: { backgroundColor: Colors.primary + '15', borderColor: Colors.primary },
+  moduleChipIcon: { fontSize: 12 },
+  moduleChipText: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
+  moduleChipTextActive: { color: Colors.primary, fontWeight: '700' },
+  fullBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
 });

@@ -43,6 +43,8 @@ export const authApi = {
     api.post('/auth/login', data),
   register: (data: any) => api.post('/auth/register', data),
   getProfile: () => api.get('/auth/profile'),
+  getModules: () => api.get('/auth/modules'),
+  updateUserModules: (userId: number, moduleIds: number[]) => api.post(`/auth/users/${userId}/modules`, { moduleIds }),
   forgotPassword: (data: { telephone: string; newPassword: string }) =>
     api.post('/auth/forgot-password', data),
   changePassword: (data: { oldPassword: string; newPassword: string }) =>
@@ -84,6 +86,8 @@ export const menuApi = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   // Variants
+  getStocks: () => api.get('/menu/stocks'),
+  updateStock: (id: number, stock: number) => api.patch(`/menu/${id}/stock`, { stock }),
   getVariants: (menuId: number) => api.get(`/menu/${menuId}/variants`),
   addVariant: (menuId: number, data: { nom: string; prix: number }) => api.post(`/menu/${menuId}/variants`, data),
   updateVariant: (variantId: number, data: { nom?: string; prix?: number }) => api.patch(`/menu/variants/${variantId}`, data),

@@ -2,6 +2,8 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { authApi } from '../../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export interface ModuleInfo { id: number; nom: string; icon: string; route: string; }
+
 interface User {
   id: number;
   nom: string;
@@ -14,6 +16,7 @@ interface User {
   restaurantTelephone?: string;
   typeAbonnement?: string;
   dateFinAbonnement?: string | null;
+  modules?: ModuleInfo[];
 }
 
 interface AuthState {
