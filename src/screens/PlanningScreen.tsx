@@ -50,11 +50,11 @@ export default function PlanningScreen() {
   const [allServeurs, setAllServeurs] = useState<any[]>([]);
 
   const ROLE_LABELS: Record<string, string> = {
-    ADMIN: 'Admin', MANAGER: 'Manager', SERVEUR: 'Serveur',
-    CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
+    ADMIN: 'Admin', MANAGER: 'Manager', RECEPTIONNISTE: 'Réception',
+    SERVEUR: 'Serveur', CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
   };
   const ROLE_COLORS: Record<string, string> = {
-    ADMIN: '#E74C3C', MANAGER: '#3498DB', SERVEUR: '#27AE60',
+    ADMIN: '#E74C3C', MANAGER: '#3498DB', RECEPTIONNISTE: '#7C3AED', SERVEUR: '#27AE60',
     CUISINE: '#F39C12', BAR: '#E67E22', CAISSIER: '#9B59B6',
   };
 
@@ -418,6 +418,7 @@ export default function PlanningScreen() {
                   </TouchableOpacity>
                   {showCreateRole && (
                     <View style={styles.dropdownList}>
+                      <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
                       <TouchableOpacity
                         style={[styles.dropdownItem, createFilterRole === '' && styles.dropdownItemSelected]}
                         onPress={() => { setCreateFilterRole(''); setForm({ ...form, utilisateurId: 0 }); setShowCreateRole(false); }}
@@ -435,6 +436,7 @@ export default function PlanningScreen() {
                           </Text>
                         </TouchableOpacity>
                       ))}
+                      </ScrollView>
                     </View>
                   )}
 
@@ -575,11 +577,6 @@ const styles = StyleSheet.create({
   selectFieldText: { fontSize: 15, color: Colors.text },
   selectFieldPlaceholder: { fontSize: 15, color: Colors.textLight },
   selectArrow: { fontSize: 12, color: Colors.textLight, marginLeft: 8 },
-  dropdownList: { backgroundColor: Colors.inputBg, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, marginTop: 4, paddingVertical: 4, maxHeight: 180 },
-  dropdownItem: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 8, marginHorizontal: 4 },
-  dropdownItemSelected: { backgroundColor: Colors.primary + '15' },
-  dropdownItemText: { fontSize: 14, color: Colors.text },
-  dropdownItemTextSelected: { fontSize: 14, color: Colors.primary, fontWeight: '600' },
   row: { flexDirection: 'row' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   optChip: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Colors.inputBg, borderWidth: 1, borderColor: Colors.border, marginTop: 4, marginRight: 6, alignSelf: 'flex-start' },

@@ -124,6 +124,7 @@ export const serveurTablesApi = {
 
 export const commandesApi = {
   getAll: () => api.get('/commandes'),
+  create: (data: any) => api.post('/commandes', data),
   getByServeur: () => api.get('/commandes/serveur'),
   getByTable: (tableId: number) => api.get(`/commandes/table/${tableId}`),
   getByCuisine: () => api.get('/commandes/cuisine'),
@@ -131,6 +132,8 @@ export const commandesApi = {
   getStats: () => api.get('/commandes/stats'),
   updateStatut: (id: number, statut: string) =>
     api.patch(`/commandes/${id}/statut`, { statut }),
+  assignServeur: (id: number, serveurId: number) =>
+    api.patch(`/commandes/${id}/assign-serveur`, { serveurId }),
   updateDetailStatut: (id: number, statut: string) =>
     api.patch(`/commandes/details/${id}/statut`, { statut }),
   toutPret: (tableId: number, destination: string) =>

@@ -22,13 +22,13 @@ import PasswordInput from '../components/PasswordInput';
 import useResponsive from '../hooks/useResponsive';
 
 const ROLE_LABELS: Record<string, string> = {
-  ADMIN: 'Admin', MANAGER: 'Manager', SERVEUR: 'Serveur',
-  CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
+  ADMIN: 'Admin', MANAGER: 'Manager', RECEPTIONNISTE: 'Réception',
+  SERVEUR: 'Serveur', CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  ADMIN: Colors.danger, MANAGER: Colors.warning, SERVEUR: Colors.primary,
-  CUISINE: Colors.accent, BAR: Colors.info, CAISSIER: Colors.success,
+  ADMIN: Colors.danger, MANAGER: Colors.warning, RECEPTIONNISTE: Colors.accent,
+  SERVEUR: Colors.primary, CUISINE: Colors.accent, BAR: Colors.info, CAISSIER: Colors.success,
 };
 
 const STATUT_LABELS: Record<string, string> = {
@@ -39,9 +39,9 @@ const STATUT_COLORS: Record<string, string> = {
   ACTIF: Colors.success, INACTIF: Colors.textLight, CONGE: Colors.warning, SUSPENDU: Colors.danger,
 };
 
-const ROLES = ['Tous', 'ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'];
+const ROLES = ['Tous', 'ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'];
 const STATUTS = ['ACTIF', 'INACTIF', 'CONGE', 'SUSPENDU'];
-const ROLE_OPTIONS = ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'];
+const ROLE_OPTIONS = ['ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'];
 
 export default function UsersScreen() {
   const { user } = useSelector((state: RootState) => state.auth);

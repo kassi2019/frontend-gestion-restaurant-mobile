@@ -317,8 +317,8 @@ export default function DashboardScreen() {
   }, [barOrders]);
 
   const roleLabels: Record<string, string> = {
-    ADMIN: 'Administrateur', MANAGER: 'Manager', SERVEUR: 'Serveur',
-    CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
+    ADMIN: 'Administrateur', MANAGER: 'Manager', RECEPTIONNISTE: 'Réceptionniste',
+    SERVEUR: 'Serveur', CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
   };
 
   const commandeCards = [
@@ -341,6 +341,7 @@ export default function DashboardScreen() {
     { icon: '📊', label: 'Statistiques', screen: 'Stats', color: '#2ECC71', roles: ['ADMIN', 'MANAGER'] },
     { icon: '⭐', label: 'Abonnement', screen: 'RestaurantSettings', color: '#9333EA', roles: ['ADMIN'] },
     { icon: '🔒', label: 'Clôture', screen: 'RestaurantSettings', color: '#EF4444', roles: ['ADMIN'] },
+    { icon: '📋', label: 'Réception', screen: 'Reception', color: '#7C3AED', roles: ['RECEPTIONNISTE'] },
     { icon: '📦', label: 'Stock', screen: 'Stock', color: '#16A34A', roles: ['ADMIN', 'MANAGER'] },
     { icon: '🔔', label: 'Notifications', screen: 'Notifications', color: '#E67E22', badge: unreadNotifs, roles: ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   ];
@@ -353,6 +354,7 @@ export default function DashboardScreen() {
     '/stats': 'Stats', '/parametres': 'RestaurantSettings',
     '/abonnement': 'RestaurantSettings', '/super/codes': 'GenerateCodes',
     '/stock': 'Stock',
+    '/reception': 'Reception',
   };
   const dynamicMenu = user?.modules?.length ? user.modules.map(m => ({
     icon: m.icon, label: m.nom, screen: routeToScreen[m.route] || m.route.replace('/', '') || 'Main',
@@ -364,8 +366,6 @@ export default function DashboardScreen() {
   const [searchCmd, setSearchCmd] = useState('');
   const [searchResult, setSearchResult] = useState<any>(null);
   const [searching, setSearching] = useState(false);
-  const [showCashierModal, setShowCashierModal] = useState(false);
-
   // ============ CASHIER DASHBOARD ============
   if (isCaissier) {
 
@@ -482,17 +482,24 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Recherche par numéro CMD */}
+        {/* Barre de recherche */}
         <View style={styles.searchRow}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="N° commande (ex: CMD-0012)"
-            value={searchCmd}
-            onChangeText={setSearchCmd}
-            onSubmitEditing={handleSearchCmd}
-            returnKeyType="search"
-            placeholderTextColor={Colors.textLight}
-          />
+          <View style={styles.searchInputWrap}>
+            <TextInput
+              style={styles.searchInputField}
+              placeholder="🔍 N° commande..."
+              placeholderTextColor={Colors.textLight}
+              value={searchCmd}
+              onChangeText={setSearchCmd}
+              onSubmitEditing={handleSearchCmd}
+              returnKeyType="search"
+            />
+            {searchCmd !== '' && (
+              <TouchableOpacity onPress={() => { setSearchCmd(''); setSearchResult(null); }}>
+                <Text style={styles.searchClear}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity style={styles.searchBtn} onPress={handleSearchCmd} disabled={searching}>
             <Text style={styles.searchBtnText}>{searching ? '...' : '🔍'}</Text>
           </TouchableOpacity>
@@ -507,11 +514,11 @@ export default function DashboardScreen() {
               const cmd = searchResult;
               setSearchResult(null);
               setSearchCmd('');
-              if (cmd.statut === 'SERVIE' || cmd.statut === 'PRETE') {
+              if (cmd.statut === 'PAYEE' || (cmd.statut !== 'EN_ATTENTE' && cmd.statut !== 'ANNULEE')) {
                 setSelectedCommande(cmd);
                 setShowActionModal(true);
               } else {
-                showToast.warning('Commande pas encore prête');
+                showToast.warning('Commande pas encore validée');
               }
             }}
           >
@@ -532,44 +539,137 @@ export default function DashboardScreen() {
             </Text>
             <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.success, marginTop: 6 }}>
               {searchResult.statut === 'PAYEE' ? '🖨 Cliquer pour réimprimer le reçu' :
-               searchResult.statut === 'SERVIE' || searchResult.statut === 'PRETE' ? '💰 Cliquer pour payer' :
+               searchResult.statut !== 'EN_ATTENTE' && searchResult.statut !== 'ANNULEE' ? '💰 Cliquer pour payer' :
                '⏳ En attente de préparation'}
             </Text>
           </TouchableOpacity>
         )}
 
-        {/* Quick stats — cliquables */}
-        <View style={styles.cashierStatsRow}>
+        {/* 2 Onglets : À payer / Payées */}
+        <View style={styles.cashierTabs}>
           <TouchableOpacity
-            style={[styles.cashierStatCard, { backgroundColor: Colors.warning + '15', borderColor: Colors.warning + '40' }]}
+            style={[styles.cashierTab, cashierDetail === 'apayer' && styles.cashierTabActive]}
             onPress={() => openCashierModal('apayer')}
-            activeOpacity={0.7}
           >
-            <Text style={styles.cashierStatIcon}>🧾</Text>
-            <Text style={styles.cashierStatValue}>{nbAPayer}</Text>
-            <Text style={styles.cashierStatLabel}>A payer</Text>
+            <Text style={[styles.cashierTabText, cashierDetail === 'apayer' && styles.cashierTabTextActive]}>
+              🧾 À payer ({nbAPayer})
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.cashierStatCard, { backgroundColor: Colors.success + '15', borderColor: Colors.success + '40' }]}
+            style={[styles.cashierTab, cashierDetail === 'factures' && styles.cashierTabActive]}
             onPress={() => openCashierModal('factures')}
-            activeOpacity={0.7}
           >
-            <Text style={styles.cashierStatIcon}>📋</Text>
-            <Text style={styles.cashierStatValue}>{caisse?.nombreFactures || 0}</Text>
-            <Text style={styles.cashierStatLabel}>Factures</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.cashierStatCard, { backgroundColor: Colors.info + '15', borderColor: Colors.info + '40' }]}
-            onPress={() => navigation.navigate('Notifications')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.cashierStatIcon}>🔔</Text>
-            <Text style={styles.cashierStatValue}>{unreadNotifs}</Text>
-            <Text style={styles.cashierStatLabel}>Non lues</Text>
+            <Text style={[styles.cashierTabText, cashierDetail === 'factures' && styles.cashierTabTextActive]}>
+              💰 Payées ({caisse?.nombreFactures || 0})
+            </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Liste selon l'onglet actif */}
+        {cashierDetail === 'apayer' ? (
+          commandesAPayerGroup.length === 0 ? (
+            <View style={styles.emptyDetail}>
+              <Text style={styles.emptyDetailIcon}>🧾</Text>
+              <Text style={styles.emptyDetailText}>Aucune commande à payer</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={commandesAPayerGroup}
+              keyExtractor={(item) => String(item.tableId)}
+              scrollEnabled={false}
+              renderItem={({ item }) => {
+                const isExpanded = expandedTables.has(item.tableId);
+                return (
+                  <View style={styles.tableGroup}>
+                    <TouchableOpacity
+                      style={styles.tableHeader}
+                      onPress={() => toggleTable(item.tableId)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.tableHeaderLeft}>
+                        <Text style={styles.tableIcon}>🪑</Text>
+                        <View>
+                          <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
+                          <Text style={styles.tableCount}>
+                            {item.commandes.length} commande{item.commandes.length > 1 ? 's' : ''} · {item.total.toFixed(2)} {devise}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+                    </TouchableOpacity>
+                    {isExpanded && (
+                      <View style={styles.tableDetails}>
+                        {item.commandes.map((cmd: any) => (
+                          <TouchableOpacity key={cmd.id} style={styles.commandeItem}
+                            onPress={() => {
+                              setSelectedCommande(cmd);
+                              setShowActionModal(true);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.commandeHeader}>
+                              <Text style={styles.commandeId}>#{cmd.id} · {cmd.statut === 'SERVIE' ? 'Servie' : cmd.statut === 'PRETE' ? 'Prête' : cmd.statut === 'VALIDEE' ? 'Validée' : cmd.statut}</Text>
+                              <Text style={styles.commandeMontant}>{formatPrixDevise(cmd.montantTotal, devise)}</Text>
+                            </View>
+                            {cmd.details?.map((d: any, di: number) => (
+                              <View key={di} style={styles.detailRow}>
+                                <Text style={styles.detailQte}>{d.quantite}x</Text>
+                                <Text style={styles.detailNom}>{d.menu?.nom || 'Article'}</Text>
+                                <Text style={styles.cashierDetailQte}>{formatPrixDevise(Number(d.prix) * d.quantite, devise)}</Text>
+                              </View>
+                            ))}
+                            <Text style={{ fontSize: 11, color: Colors.success, marginTop: 4, fontWeight: '600' }}>💰 Cliquer pour payer</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              }}
+            />
+          )
+        ) : cashierDetail === 'factures' ? (
+          facturesList.length === 0 ? (
+            <View style={styles.emptyDetail}>
+              <Text style={styles.emptyDetailIcon}>📋</Text>
+              <Text style={styles.emptyDetailText}>Aucune facture aujourd'hui</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={facturesList}
+              keyExtractor={(item) => String(item.id)}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.factureItem}
+                  onPress={() => {
+                    const url = paiementApi.imprimerFacture(item.id);
+                    Linking.openURL(url).catch(() => showToast.error('Impossible d\'ouvrir le reçu'));
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.factureLeft}>
+                    <Text style={styles.factureNum}>Facture {item.numero}</Text>
+                    <Text style={styles.factureTable}>
+                      Table {item.commande?.table?.numero || '?'} · {item.modePaiement ? MODE_LABELS_CASHIER[item.modePaiement] || item.modePaiement : '—'}
+                    </Text>
+                    <Text style={styles.factureDate}>
+                      {new Date(item.dateFacture).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                  <View style={styles.factureRight}>
+                    <Text style={styles.factureMontant}>{formatPrixDevise(item.montantTotal, devise)}</Text>
+                    <Text style={styles.printIcon}>🖨</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          )
+        ) : null}
+
+        {/* Clôture */}
         <TouchableOpacity
-          style={[styles.clotureCard, { marginTop: 8 }]}
+          style={[styles.clotureCard, { marginTop: 12 }]}
           onPress={() => openCashierModal('clotures')}
           activeOpacity={0.7}
         >
@@ -578,8 +678,49 @@ export default function DashboardScreen() {
           <Text style={{ color: Colors.primary, fontSize: 18 }}>›</Text>
         </TouchableOpacity>
 
+        {/* Modal Clotures */}
+        <Modal visible={cashierDetail === 'clotures'} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Clôtures ({cloturesList.length})</Text>
+                <TouchableOpacity onPress={() => setCashierDetail(null)} style={styles.modalClose}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              {cloturesList.length === 0 ? (
+                <View style={styles.emptyDetail}>
+                  <Text style={styles.emptyDetailIcon}>📋</Text>
+                  <Text style={styles.emptyDetailText}>Aucune clôture</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={cloturesList}
+                  keyExtractor={(item) => String(item.id)}
+                  renderItem={({ item }) => (
+                    <View style={styles.clotureItem}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
+                          {new Date(item.dateCloture).toLocaleString('fr-FR')}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 2 }}>
+                          {item.caissier?.nom || '—'} · {item.nbFactures} facture(s)
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.success }}>
+                        {formatPrixDevise(item.totalGeneral, devise)}
+                      </Text>
+                    </View>
+                  )}
+                  style={styles.detailList}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
+
         {/* Acces Rapide */}
-        <Text style={styles.sectionTitle}>Acces Rapide</Text>
+        <Text style={styles.sectionTitle}>Accès Rapide</Text>
         <View style={styles.menuGrid}>
           {filteredMenu.map((item, index) => (
             <TouchableOpacity
@@ -600,168 +741,6 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           ))}
         </View>
-
-        {/* Modal Detail Caissier */}
-        <Modal visible={showCashierModal} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  {cashierDetail === 'apayer' ? `A payer (${commandesAPayerGroup.length} tables)` : cashierDetail === 'factures' ? `Factures du jour (${facturesList.length})` : `Clôtures (${cloturesList.length})`}
-                </Text>
-                <TouchableOpacity onPress={() => setShowCashierModal(false)} style={styles.modalClose}>
-                  <Text style={styles.modalCloseText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              {cashierDetail === 'apayer' ? (
-                commandesAPayerGroup.length === 0 ? (
-                  <View style={styles.emptyDetail}>
-                    <Text style={styles.emptyDetailIcon}>🧾</Text>
-                    <Text style={styles.emptyDetailText}>Aucune commande a payer</Text>
-                  </View>
-                ) : (
-                  <FlatList
-                    data={commandesAPayerGroup}
-                    keyExtractor={(item) => String(item.tableId)}
-                    renderItem={({ item }) => {
-                      const isExpanded = expandedTables.has(item.tableId);
-                      return (
-                        <View style={styles.tableGroup}>
-                          <TouchableOpacity
-                            style={styles.tableHeader}
-                            onPress={() => toggleTable(item.tableId)}
-                            activeOpacity={0.7}
-                          >
-                            <View style={styles.tableHeaderLeft}>
-                              <Text style={styles.tableIcon}>🪑</Text>
-                              <View>
-                                <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
-                                <Text style={styles.tableCount}>
-                                  {item.commandes.length} commande{item.commandes.length > 1 ? 's' : ''} · {item.total.toFixed(2)} {devise}
-                                </Text>
-                              </View>
-                            </View>
-                            <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
-                          </TouchableOpacity>
-                          {isExpanded && (
-                            <View style={styles.tableDetails}>
-                              {item.commandes.map((cmd: any) => (
-                                <View key={cmd.id} style={styles.commandeItem}>
-                                  <View style={styles.commandeHeader}>
-                                    <Text style={styles.commandeId}>#{cmd.id} — {cmd.statut === 'SERVIE' ? 'Servie' : 'Prete'}</Text>
-                                    <Text style={styles.commandeMontant}>{Number(cmd.montantTotal).toFixed(2)} {devise}</Text>
-                                  </View>
-                                  {cmd.session?.dateArrivee && (
-                                    <Text style={styles.cashierInfo}>
-                                      🕐 Arrivee: {new Date(cmd.session.dateArrivee).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                                    </Text>
-                                  )}
-                                  {cmd.serveur && (
-                                    <Text style={styles.cashierInfo}>
-                                      👤 Serveur: {cmd.serveur.nom}
-                                    </Text>
-                                  )}
-                                  {cmd.details?.map((d: any, di: number) => (
-                                    <View key={di} style={styles.detailRow}>
-                                      <Text style={styles.detailQte}>{d.quantite}x</Text>
-                                      <Text style={styles.detailNom}>{d.menu?.nom || 'Article'}</Text>
-                                      <Text style={styles.cashierDetailQte}>{formatPrixDevise(Number(d.prix) * d.quantite, devise)}</Text>
-                                    </View>
-                                  ))}
-                                </View>
-                              ))}
-                            </View>
-                          )}
-                        </View>
-                      );
-                    }}
-                    style={styles.detailList}
-                  />
-                )
-              ) : cashierDetail === 'clotures' ? (
-                cloturesList.length === 0 ? (
-                  <View style={styles.emptyDetail}>
-                    <Text style={styles.emptyDetailIcon}>📋</Text>
-                    <Text style={styles.emptyDetailText}>Aucune clôture</Text>
-                  </View>
-                ) : (
-                  <FlatList
-                    data={cloturesList}
-                    keyExtractor={(item) => String(item.id)}
-                    renderItem={({ item }) => (
-                      <View style={styles.clotureItem}>
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>
-                              {new Date(item.dateCloture).toLocaleString('fr-FR')}
-                            </Text>
-                            <Text style={{
-                              fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8,
-                              backgroundColor: item.type === 'GLOBAL' ? Colors.danger + '15' : Colors.primary + '15',
-                              color: item.type === 'GLOBAL' ? Colors.danger : Colors.primary,
-                            }}>
-                              {item.type === 'GLOBAL' ? 'Globale' : 'Caissier'}
-                            </Text>
-                          </View>
-                          <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 2 }}>
-                            {item.caissier?.nom || '—'} · {item.nbFactures} facture(s)
-                          </Text>
-                          <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
-                            <Text style={{ fontSize: 11, color: Colors.success }}>💵 {formatPrixDevise(item.totalEspeces, devise)}</Text>
-                            <Text style={{ fontSize: 11, color: Colors.primary }}>📱 {formatPrixDevise(item.totalMobile, devise)}</Text>
-                            <Text style={{ fontSize: 11, color: Colors.accent }}>💳 {formatPrixDevise(item.totalCarte, devise)}</Text>
-                          </View>
-                        </View>
-                        <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.success }}>
-                          {formatPrixDevise(item.totalGeneral, devise)}
-                        </Text>
-                      </View>
-                    )}
-                    style={styles.detailList}
-                  />
-                )
-              ) : cashierDetail === 'factures' ? (
-                facturesList.length === 0 ? (
-                  <View style={styles.emptyDetail}>
-                    <Text style={styles.emptyDetailIcon}>📋</Text>
-                    <Text style={styles.emptyDetailText}>Aucune facture aujourd'hui</Text>
-                  </View>
-                ) : (
-                  <FlatList
-                    data={facturesList}
-                    keyExtractor={(item) => String(item.id)}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        style={styles.factureItem}
-                        onPress={() => {
-                          const url = paiementApi.imprimerFacture(item.id);
-                          Linking.openURL(url).catch(() => showToast.error('Impossible d\'ouvrir le reçu'));
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.factureLeft}>
-                          <Text style={styles.factureNum}>Facture {item.numero}</Text>
-                          <Text style={styles.factureTable}>
-                            Table {item.commande?.table?.numero || '?'} · {item.modePaiement ? MODE_LABELS_CASHIER[item.modePaiement] || item.modePaiement : '—'}
-                          </Text>
-                          <Text style={styles.factureDate}>
-                            {new Date(item.dateFacture).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </Text>
-                        </View>
-                        <View style={styles.factureRight}>
-                          <Text style={styles.factureMontant}>{formatPrixDevise(item.montantTotal, devise)}</Text>
-                          <Text style={styles.printIcon}>🖨</Text>
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                    style={styles.detailList}
-                  />
-                )
-              ) : null}
-            </View>
-          </View>
-        </Modal>
 
         {/* ActionSheet de paiement depuis la recherche */}
         <ActionSheet
@@ -1582,6 +1561,25 @@ const styles = StyleSheet.create({
   caisseCardItemLabel: { color: Colors.textWhite, fontSize: 11, opacity: 0.7 },
   caisseCardItemValue: { color: Colors.textWhite, fontSize: 15, fontWeight: '700', marginTop: 2 },
   caisseCardCount: { color: Colors.textWhite, fontSize: 12, opacity: 0.6, marginTop: 10 },
+  // Cashier tabs
+  cashierTabs: { flexDirection: 'row', paddingHorizontal: 12, marginTop: 12, gap: 8 },
+  cashierTab: {
+    flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: 'center',
+    backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border,
+  },
+  cashierTabActive: { backgroundColor: Colors.warning, borderColor: Colors.warning },
+  cashierTabText: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  cashierTabTextActive: { color: Colors.textWhite },
+
+  // Search input wrap
+  searchInputWrap: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.inputBg, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 10,
+  },
+  searchInputField: { flex: 1, height: 40, fontSize: 13, color: Colors.text },
+  searchClear: { fontSize: 16, color: Colors.textLight, paddingLeft: 6 },
+
   cashierStatsRow: { flexDirection: 'row', paddingHorizontal: 12, marginTop: 8, gap: 8 },
   cashierStatCard: {
     flex: 1, borderRadius: 16, padding: 14, alignItems: 'center',
@@ -1795,12 +1793,12 @@ const styles = StyleSheet.create({
   closeReceiptText: { color: Colors.textLight, fontWeight: '600', fontSize: 14 },
   // Clôtures
   clotureCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.surface, marginHorizontal: 12, borderRadius: 16,
-    padding: 16, borderWidth: 1, borderColor: Colors.border,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.surface, marginHorizontal: 12, borderRadius: 12,
+    padding: 12, borderWidth: 1, borderColor: Colors.border,
   },
-  clotureCardIcon: { fontSize: 20 },
-  clotureCardText: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.text },
+  clotureCardIcon: { fontSize: 16 },
+  clotureCardText: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.text },
   clotureItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: Colors.surface, borderRadius: 12, padding: 14, marginBottom: 8,

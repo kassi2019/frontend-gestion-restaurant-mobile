@@ -33,7 +33,7 @@ const ZONES = ['Terrasse', 'Intérieur', 'VIP', 'Comptoir'];
 export default function TablesScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const navigation = useNavigation<any>();
-  const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const canViewAll = user?.role === 'ADMIN' || user?.role === 'MANAGER' || user?.role === 'RECEPTIONNISTE';
   const { columns, sp } = useResponsive();
   const [tables, setTables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +50,7 @@ export default function TablesScreen() {
 
   const loadTables = async () => {
     try {
-      if (isManager) {
+      if (canViewAll) {
         const { data } = await tablesApi.getAll();
         setTables(Array.isArray(data) ? data : []);
       } else {
@@ -200,7 +200,7 @@ export default function TablesScreen() {
 
   const handleTablePress = (item: any) => {
     setSelectedTable(item);
-    if (isManager) {
+    if (canViewAll) {
       setShowActionModal(true);
     } else {
       loadTableOrders(item.id);
@@ -269,7 +269,7 @@ export default function TablesScreen() {
         }
       />
 
-      {isManager && (
+      {canViewAll && (
         <>
           <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
             <Text style={styles.fabText}>+</Text>
@@ -443,7 +443,7 @@ export default function TablesScreen() {
       </Modal>
 
       {/* Daily Check button (Manager only) */}
-      {isManager && (
+      {canViewAll && (
         <TouchableOpacity style={styles.checkFab} onPress={handleRunDailyCheck}>
           <Text style={styles.checkFabText}>🔄</Text>
         </TouchableOpacity>
