@@ -9,14 +9,17 @@ import { Colors } from '../theme/colors';
 import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { commandesApi, tablesApi, menuApi, usersApi } from '../services/api';
 import { showToast } from '../services/toast';
-import { getSocket } from '../services/socket';
+import { getSocket, connectSocket } from '../services/socket';
 import * as Print from 'expo-print';
+import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 type TabType = 'arrivees' | 'validees' | 'payees';
 
 export default function ReceptionnisteScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const devise = useSelector(selectDevise);
+  const modeGestion = (user as any)?.modeGestion || 'RECEPTION'; // SERVEUR ou RECEPTION
+  const isModeServeur = modeGestion === 'SERVEUR';
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -31,6 +34,7 @@ export default function ReceptionnisteScreen() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDate, setFilterDate] = useState(aujourdhui);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Modal ticket
   const [showTickets, setShowTickets] = useState(false);
@@ -63,18 +67,30 @@ export default function ReceptionnisteScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Socket temps réel
+  // Polling automatique en arrière-plan (toutes les 10 secondes)
   useEffect(() => {
+    const interval = setInterval(() => { loadData(); }, 10000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  // Socket temps réel — connexion proactive
+  useEffect(() => {
+    connectSocket(); // S'assurer que le socket est connecté
     const socket = getSocket();
-    if (socket) {
-      const refresh = () => loadData();
-      socket.on('nouvelle_commande', refresh);
-      socket.on('commande_status_change', refresh);
-      return () => {
-        socket.off('nouvelle_commande', refresh);
-        socket.off('commande_status_change', refresh);
-      };
-    }
+    if (!socket) return;
+
+    const refresh = () => loadData();
+    socket.on('nouvelle_commande', refresh);
+    socket.on('commande_status_change', refresh);
+    socket.on('notification_user', refresh);
+    socket.on('notification_admin', refresh);
+
+    return () => {
+      socket.off('nouvelle_commande', refresh);
+      socket.off('commande_status_change', refresh);
+      socket.off('notification_user', refresh);
+      socket.off('notification_admin', refresh);
+    };
   }, [loadData]);
 
   // Filtrer par recherche et date
@@ -98,8 +114,8 @@ export default function ReceptionnisteScreen() {
 
   // Filtrer par onglet (avec filtre null)
   const arrivees = filteredCommandes.filter((c: any) => c.statut === 'EN_ATTENTE');
-  const validees = filteredCommandes.filter((c: any) => c.statut === 'VALIDEE');
-  const payees = filteredCommandes.filter((c: any) => c.statut === 'PAYEE');
+  const validees = filteredCommandes.filter((c: any) => c.statut === 'VALIDEE' || c.statut === 'SERVEUR_VALIDE' || c.statut === 'RECEPTION_VALIDE');
+  const payees = filteredCommandes.filter((c: any) => c.statut === 'PAYEE' || c.statut === 'SERVIE');
 
   // Charge par serveur : commandes du jour EN_ATTENTE ou VALIDEE
   const serveursAvecCharge = useMemo(() => {
@@ -152,20 +168,12 @@ export default function ReceptionnisteScreen() {
     }
   };
 
-  // Valider → VALIDEE → 4 tickets
+  // Valider → RECEPTION_VALIDE → tickets
   const handleValider = async (cmd: any) => {
     try {
-      // Serveur obligatoire sauf pour les commandes à emporter
-      const isEmporter = cmd.typeCommande === 'A_EMPORTER' || cmd.table?.zone?.toUpperCase() === 'COMPTOIR' || cmd.table?.numero?.toUpperCase() === 'T00';
-      if (!cmd.serveurId && !isEmporter) {
-        showToast.error('Assigner un serveur avant de valider');
-        return;
-      }
-      await commandesApi.updateStatut(cmd.id, 'VALIDEE');
+      await commandesApi.updateStatut(cmd.id, 'RECEPTION_VALIDE');
       showToast.success('Commande validée !');
-
-      // Afficher les 4 tickets
-      setTicketCmd({ ...cmd, statut: 'VALIDEE' });
+      setTicketCmd({ ...cmd, statut: 'RECEPTION_VALIDE' });
       setShowTickets(true);
       loadData();
     } catch (err: any) {
@@ -191,8 +199,9 @@ export default function ReceptionnisteScreen() {
   const statutColor = (s: string) => {
     switch (s) {
       case 'EN_ATTENTE': return '#FF9800';
-      case 'VALIDEE': return '#2196F3';
-      case 'PAYEE': return '#4CAF50';
+      case 'VALIDEE': case 'SERVEUR_VALIDE': return '#2196F3';
+      case 'RECEPTION_VALIDE': return '#4CAF50';
+      case 'PAYEE': case 'SERVIE': return '#9C27B0';
       default: return '#999';
     }
   };
@@ -200,8 +209,9 @@ export default function ReceptionnisteScreen() {
   const statutLabel = (s: string) => {
     switch (s) {
       case 'EN_ATTENTE': return 'En attente';
-      case 'VALIDEE': return 'Validée';
-      case 'PAYEE': return 'Payée';
+      case 'VALIDEE': case 'SERVEUR_VALIDE': return 'Serv. validé';
+      case 'RECEPTION_VALIDE': return 'Récep. validé';
+      case 'PAYEE': case 'SERVIE': return 'Payée';
       default: return s;
     }
   };
@@ -221,47 +231,61 @@ export default function ReceptionnisteScreen() {
   };
 
   // Imprimer les 4 tickets d'un coup (mobile via expo-print)
-  const imprimerTout = async (cmd: any) => {
-    const tableNumero = getTableNumero(cmd.tableId);
-    const serveurNom = getServeurNom(cmd.serveurId) || '—';
-    const dateStr = new Date(cmd.dateCommande).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const cmdRef = 'CMD-' + String(cmd.id).padStart(4, '0');
-    const total = Number(cmd.montantTotal || 0).toFixed(2);
-    const articlesCuisine = getDetailsCuisine(cmd);
-    const articlesBar = getDetailsBar(cmd);
-    const articles = cmd.details || [];
+  const imprimerTout = async (item: any) => {
+    // Si item groupé (a un tableau commandes), fusionner toutes les commandes
+    const commandes = item.commandes || [item];
+    const tableNumero = item.tableNumero || getTableNumero(item.tableId);
+    const serveurNom = getServeurNom(item.serveurId) || '—';
+    const total = Number(commandes.reduce((s: number, c: any) => s + Number(c.montantTotal || 0), 0)).toFixed(2);
+
+    // Fusionner tous les détails de toutes les commandes
+    const allDetails: any[] = [];
+    const allCuisine: any[] = [];
+    const allBar: any[] = [];
+    const refs: string[] = [];
+    commandes.forEach((cmd: any) => {
+      refs.push('CMD-' + String(cmd.id).padStart(4, '0'));
+      allDetails.push(...(cmd.details || []));
+      allCuisine.push(...getDetailsCuisine(cmd));
+      allBar.push(...getDetailsBar(cmd));
+    });
+    const refStr = refs.join(' · ');
+
     const ligne = '<div style="border-top:1px dashed #000;margin:6px 0"></div>';
     const coupe = '<div style="text-align:center;padding:8px 0;font-size:10px;letter-spacing:8px">- - - - ✂ - - - -</div>';
     const bloc = (t: string, items: any[], avecPrix: boolean, avecTotal: boolean, ref?: boolean) =>
-      '<h3 style="text-align:center;font-size:13px;margin:4px 0">' + t + '</h3><p style="text-align:center;font-size:9px;color:#555">' + cmdRef + ' · ' + dateStr + '</p>' + ligne +
+      '<h3 style="text-align:center;font-size:13px;margin:4px 0">' + t + '</h3><p style="text-align:center;font-size:9px;color:#555">' + refStr + '</p>' + ligne +
       (items.map((d: any) => avecPrix
         ? '<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0"><span>' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</span><span>' + (Number(d.prix || 0) * d.quantite).toFixed(2) + ' ' + devise + '</span></div>'
         : '<div style="font-size:11px;padding:1px 0">' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</div>'
       ).join('') || '<p style="text-align:center;color:#999;font-size:10px;font-style:italic">Aucun article</p>') +
       (avecTotal ? ligne + '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;padding:2px 0"><span>TOTAL</span><span>' + total + ' ' + devise + '</span></div>' : '') +
-      (ref ? '<p style="text-align:center;font-size:9px;font-weight:700;margin-top:4px">Réf: ' + cmdRef + '</p>' : '');
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Commande ' + cmdRef + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;padding:10px;max-width:280px;margin:0 auto;color:#000;font-size:11px}h1{text-align:center;font-size:15px;margin-bottom:2px}</style></head><body><h1>RestoPro</h1><p style="text-align:center;font-size:9px;color:#555;margin-bottom:4px">Gestion Restaurant</p><p style="text-align:center;font-size:9px;color:#555">Table: ' + tableNumero + ' · Serveur: ' + serveurNom + '</p>' + ligne + bloc('🍳 CUISINE', articlesCuisine, false, false) + coupe + bloc('🍸 BAR', articlesBar, false, false) + coupe + bloc('🧾 SERVEUR', articles, true, true) + coupe + bloc('💰 CAISSE', articles, true, true, true) + ligne + '<p style="text-align:center;font-size:9px;color:#aaa;margin-top:4px">RestoPro © ' + new Date().getFullYear() + '</p><p style="text-align:center;font-size:9px;color:#aaa">Merci de votre visite</p></body></html>';
+      (ref ? '<p style="text-align:center;font-size:9px;font-weight:700;margin-top:4px">Réf: ' + refStr + '</p>' : '');
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Commande ' + refStr + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;padding:10px;max-width:280px;margin:0 auto;color:#000;font-size:11px}h1{text-align:center;font-size:15px;margin-bottom:2px}</style></head><body><h1>RestoPro</h1><p style="text-align:center;font-size:9px;color:#555;margin-bottom:4px">Gestion Restaurant</p><p style="text-align:center;font-size:9px;color:#555">Table: ' + tableNumero + ' · Serveur: ' + serveurNom + '</p>' + ligne + bloc('🍳 CUISINE', allCuisine, false, false) + coupe + bloc('🍸 BAR', allBar, false, false) + coupe + bloc('🧾 SERVEUR', allDetails, true, true) + coupe + bloc('💰 CAISSE', allDetails, true, true, true) + ligne + '<p style="text-align:center;font-size:9px;color:#aaa;margin-top:4px">RestoPro © ' + new Date().getFullYear() + '</p><p style="text-align:center;font-size:9px;color:#aaa">Merci de votre visite</p></body></html>';
     try { await Print.printAsync({ html }); } catch {}
   };
 
   const renderCommande = ({ item }: { item: any }) => {
     if (!item) return null;
-    const serveurNom = getServeurNom(item.serveurId);
     const isEnAttente = item.statut === 'EN_ATTENTE';
-    const isEmporter = item.typeCommande === 'A_EMPORTER' || item.table?.zone?.toUpperCase() === 'COMPTOIR' || item.table?.numero?.toUpperCase() === 'T00';
-    const isExpanded = expandedIds.has(item.id);
+    const isEmporter = item.typeCommande === 'A_EMPORTER';
+    const isExpanded = expandedIds.has(item.tableId);
+    const serveurNom = getServeurNom(item.serveurId);
+    const nbCmd = item.commandes?.length || 1;
 
     return (
       <View style={[styles.cmdCard, { borderLeftColor: statutColor(item.statut), borderLeftWidth: 5 }]}>
         {/* En-tête commande — cliquable pour déplier */}
-        <TouchableOpacity style={styles.cmdHeaderTouch} onPress={() => toggleExpand(item.id)} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.cmdHeaderTouch} onPress={() => toggleExpand(item.tableId)} activeOpacity={0.7}>
           <View style={{ flex: 1 }}>
             <Text style={styles.cmdTitle}>
-              Table {getTableNumero(item.tableId)} · #{String(item.id || 0).padStart(4, '0')}
+              Table {item.tableNumero} · {nbCmd} commande{nbCmd > 1 ? 's' : ''}
+            </Text>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#E86B2A', marginTop: 2 }}>
+              {item.commandes?.map((c: any) => 'CMD-' + String(c.id).padStart(4, '0')).join(' · ')}
             </Text>
             <Text style={styles.cmdTime}>
-              {item.dateCommande ? new Date(item.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—'}
-              {isEmporter ? ' · 🛍️ Comptoir' : serveurNom ? ` · 👤 ${serveurNom}` : ' · ⚠️ Sans serveur'}
+              {nbCmd > 1 ? '🛒 Commandes groupées' : isEmporter ? '🛍️ Comptoir' : serveurNom ? `👤 ${serveurNom}` : '⚠️ Sans serveur'}
             </Text>
           </View>
           <View style={[styles.statutBadge, { backgroundColor: statutColor(item.statut) + '20' }]}>
@@ -270,7 +294,7 @@ export default function ReceptionnisteScreen() {
             </Text>
           </View>
           {!isEnAttente && (
-            <TouchableOpacity onPress={(e) => { e.stopPropagation; imprimerTout(item); }} style={styles.printBtn}>
+            <TouchableOpacity onPress={(e) => { e.stopPropagation(); imprimerTout(item); }} style={styles.printBtn}>
               <Text style={{ fontSize: 14 }}>🖨</Text>
             </TouchableOpacity>
           )}
@@ -282,28 +306,38 @@ export default function ReceptionnisteScreen() {
           Total : {formatPrixDevise(item.montantTotal, devise)}
         </Text>
 
-        {/* Détails plats — visible uniquement si déplié */}
+        {/* Détails — visible uniquement si déplié */}
         {isExpanded && (
-          <View style={styles.detailsList}>
-            {(item.details || []).map((d: any) => (
-              <View key={d.id} style={styles.detailRow}>
-                <Text style={styles.detailQte}>{d.quantite}x</Text>
-                <Text style={styles.detailNom}>{d.menu?.nom || 'Plat'}</Text>
-                <Text style={styles.detailPrix}>
-                  {formatPrixDevise(Number(d.prix) * d.quantite, devise)}
-                </Text>
+          <View>
+            {(item.commandes || []).map((cmd: any, idx: number) => (
+              <View key={cmd.id || idx} style={styles.detailsList}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.cmdTime}>#{String(cmd.id).padStart(4, '0')} · {new Date(cmd.dateCommande).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
+                  <TouchableOpacity onPress={() => imprimerTout(cmd)} style={{ paddingHorizontal: 8, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 12 }}>🖨</Text>
+                  </TouchableOpacity>
+                </View>
+                {(cmd.details || []).map((d: any) => (
+                  <View key={d.id} style={styles.detailRow}>
+                    <Text style={styles.detailQte}>{d.quantite}x</Text>
+                    <Text style={styles.detailNom}>{d.menu?.nom || 'Plat'}</Text>
+                    <Text style={styles.detailPrix}>
+                      {formatPrixDevise(Number(d.prix) * d.quantite, devise)}
+                    </Text>
+                  </View>
+                ))}
               </View>
             ))}
           </View>
         )}
 
-        {/* Actions (EN_ATTENTE uniquement) */}
-        {isEnAttente && (
+        {/* Mode 2 (RECEPTION) : EN_ATTENTE → Valider réception */}
+        {!isModeServeur && isEnAttente && (
           <View style={styles.actions}>
             {!isEmporter && (
               <TouchableOpacity
                 style={styles.actionAssign}
-                onPress={() => openAssign(item.id, item.serveurId)}
+                onPress={() => openAssign(item.commandes?.[0]?.id, item.serveurId)}
               >
                 <Text style={styles.actionAssignText}>
                   👤 {item.serveurId ? 'Changer serveur' : 'Assigner serveur'}
@@ -311,10 +345,46 @@ export default function ReceptionnisteScreen() {
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              style={[styles.actionValider, !item.serveurId && !isEmporter && { opacity: 0.5 }]}
-              onPress={() => handleValider(item)}
+              style={styles.actionValider}
+              onPress={() => { item.commandes.forEach((c: any) => handleValider(c)); }}
             >
-              <Text style={styles.actionValiderText}>✅ Valider{isEmporter ? ' (comptoir)' : ''}</Text>
+              <Text style={styles.actionValiderText}>✅ Valider + 🖨</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Mode 1 (SERVEUR) : VALIDEE ou SERVEUR_VALIDE → Réception valide */}
+        {isModeServeur && (item.statut === 'VALIDEE' || item.statut === 'SERVEUR_VALIDE') && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionValider, { flex: 1 }]}
+              onPress={() => { item.commandes.forEach((c: any) => handleValider(c)); }}
+            >
+              <Text style={styles.actionValiderText}>✅ Valider réception + 🖨</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionAssign, { flex: 1 }]}
+              onPress={async () => {
+                await commandesApi.notifierPret(item.commandes?.[0]?.id);
+                showToast.success('Serveur et client notifiés');
+              }}
+            >
+              <Text style={[styles.actionAssignText, { textAlign: 'center' }]}>📢 Commande prête</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Mode 1 (SERVEUR) : RECEPTION_VALIDE → bouton prêt seulement */}
+        {isModeServeur && item.statut === 'RECEPTION_VALIDE' && (
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.actionAssign, { flex: 1 }]}
+              onPress={async () => {
+                await commandesApi.notifierPret(item.commandes?.[0]?.id);
+                showToast.success('Serveur et client notifiés');
+              }}
+            >
+              <Text style={[styles.actionAssignText, { textAlign: 'center' }]}>📢 Commande prête</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -328,12 +398,42 @@ export default function ReceptionnisteScreen() {
     { key: 'payees', label: 'Payées', icon: '💰', count: payees.length, color: '#4CAF50' },
   ];
 
+  // Grouper les commandes par table
+  const grouperParTable = (cmds: any[]) => {
+    const groupes: Record<number, any> = {};
+    for (const c of cmds) {
+      if (!c) continue;
+      const tid = c.tableId;
+      if (!groupes[tid]) {
+        groupes[tid] = {
+          tableId: tid,
+          tableNumero: getTableNumero(tid),
+          commandes: [],
+          montantTotal: 0,
+          serveurId: c.serveurId,
+          typeCommande: c.typeCommande,
+          table: c.table,
+          details: [],
+          statut: c.statut, // Priorité: EN_ATTENTE > VALIDEE > PAYEE
+        };
+      }
+      groupes[tid].commandes.push(c);
+      groupes[tid].montantTotal += Number(c.montantTotal || 0);
+      groupes[tid].details.push(...(c.details || []));
+      // Garder le statut le plus prioritaire
+      if (c.statut === 'EN_ATTENTE') groupes[tid].statut = 'EN_ATTENTE';
+      else if (c.statut === 'VALIDEE' && groupes[tid].statut !== 'EN_ATTENTE') groupes[tid].statut = 'VALIDEE';
+      else if (c.statut === 'PAYEE' && groupes[tid].statut !== 'EN_ATTENTE' && groupes[tid].statut !== 'VALIDEE') groupes[tid].statut = 'PAYEE';
+    }
+    return Object.values(groupes);
+  };
+
   // Si recherche active → montrer tous les résultats (tous statuts confondus)
   // Sinon → filtrer par l'onglet actif
-  const isSearching = searchTerm.trim() !== '' || filterDate !== '';
-  const currentData = isSearching
-    ? filteredCommandes
-    : (activeTab === 'arrivees' ? arrivees : activeTab === 'validees' ? validees : payees);
+  // Mode recherche uniquement si l'utilisateur saisit un numéro de commande
+  const isSearching = searchTerm.trim() !== '';
+  const rawData = isSearching ? filteredCommandes : (activeTab === 'arrivees' ? arrivees : activeTab === 'validees' ? validees : payees);
+  const currentData = grouperParTable(rawData);
 
   return (
     <View style={styles.container}>
@@ -379,15 +479,9 @@ export default function ReceptionnisteScreen() {
           )}
         </View>
         <View style={styles.searchInputWrap}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="📅 Date"
-            placeholderTextColor={Colors.textLight}
-            value={filterDate}
-            onChangeText={(t) => setFilterDate(t || aujourdhui)}
-            keyboardType="numbers-and-punctuation"
-            maxLength={10}
-          />
+          <TouchableOpacity style={{ flex: 1, justifyContent: 'center', height: 36 }} onPress={() => setShowDatePicker(true)}>
+            <Text style={{ fontSize: 12, color: Colors.text }}>📅 {formatDisplay(filterDate)}</Text>
+          </TouchableOpacity>
           {filterDate !== aujourdhui && (
             <TouchableOpacity onPress={() => setFilterDate(aujourdhui)}>
               <Text style={styles.searchClear}>↺</Text>
@@ -421,7 +515,7 @@ export default function ReceptionnisteScreen() {
       ) : (
         <FlatList
           data={currentData}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => `table-${item.tableId}`}
           contentContainerStyle={styles.list}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} colors={[Colors.primary]} />
@@ -494,8 +588,8 @@ export default function ReceptionnisteScreen() {
               )}
             </View>
 
-            {/* Ticket SERVEUR */}
-            <View style={styles.ticketBlock}>
+            {/* Ticket SERVEUR (Mode 2 uniquement) */}
+            {!isModeServeur && <View style={styles.ticketBlock}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <Text style={[styles.ticketHeader, { marginBottom: 0 }]}>🧾 SERVEUR — {ticketCmd ? getServeurNom(ticketCmd.serveurId) || '?' : ''}</Text>
                 <TouchableOpacity onPress={() => imprimerTicket(ticketCmd, 'serveur')} style={styles.printSmallBtn}>
@@ -518,10 +612,10 @@ export default function ReceptionnisteScreen() {
                   {formatPrixDevise(ticketCmd?.montantTotal || 0, devise)}
                 </Text>
               </View>
-            </View>
+            </View>}
 
-            {/* Ticket CAISSE */}
-            <View style={[styles.ticketBlock, { backgroundColor: '#FFF8E1', borderColor: '#FFC107' }]}>
+            {/* Ticket CAISSE (Mode 2 uniquement) */}
+            {!isModeServeur && <View style={[styles.ticketBlock, { backgroundColor: '#FFF8E1', borderColor: '#FFC107' }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <Text style={[styles.ticketHeader, { marginBottom: 0 }]}>💰 CAISSE</Text>
                 <TouchableOpacity onPress={() => imprimerTicket(ticketCmd, 'caisse')} style={styles.printSmallBtn}>
@@ -550,7 +644,7 @@ export default function ReceptionnisteScreen() {
               <Text style={styles.ticketRef}>
                 Réf : CMD-{String(ticketCmd?.id || 0).padStart(4, '0')}
               </Text>
-            </View>
+            </View>}
 
             <TouchableOpacity style={styles.ticketClose} onPress={() => setShowTickets(false)}>
               <Text style={styles.ticketCloseText}>Fermer</Text>
@@ -601,6 +695,8 @@ export default function ReceptionnisteScreen() {
           </View>
         </View>
       </Modal>
+      {/* Calendrier */}
+      <CalendarPicker visible={showDatePicker} value={filterDate} onSelect={(d: string) => { setFilterDate(d); setShowDatePicker(false); }} onClose={() => setShowDatePicker(false)} />
     </View>
   );
 }

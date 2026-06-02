@@ -16,6 +16,7 @@ interface User {
   restaurantTelephone?: string;
   typeAbonnement?: string;
   dateFinAbonnement?: string | null;
+  modeGestion?: string;
   modules?: ModuleInfo[];
 }
 

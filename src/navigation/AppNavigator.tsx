@@ -24,6 +24,8 @@ import RestaurantSettingsScreen from '../screens/RestaurantSettingsScreen';
 import AssignTablesScreen from '../screens/AssignTablesScreen';
 import StockScreen from '../screens/StockScreen';
 import ReceptionnisteScreen from '../screens/ReceptionnisteScreen';
+import ReservationsScreen from '../screens/ReservationsScreen';
+import LivraisonsScreen from '../screens/LivraisonsScreen';
 import GenerateCodesScreen from '../screens/GenerateCodesScreen';
 import DashboardAdminScreen from '../screens/DashboardAdminScreen';
 import HistoriqueAbonnementScreen from '../screens/HistoriqueAbonnementScreen';
@@ -167,6 +169,8 @@ export default function AppNavigator() {
             <Stack.Screen name="AssignTables" component={AssignTablesScreen} options={{ headerShown: true, headerTitle: 'Affecter les tables', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Stock" component={StockScreen} options={{ headerShown: true, headerTitle: '📦 Gestion de Stock', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Reception" component={ReceptionnisteScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Reservations" component={ReservationsScreen} options={{ headerShown: true, headerTitle: '🪑 Réservations', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen name="Livraisons" component={LivraisonsScreen} options={{ headerShown: true, headerTitle: '🚚 Livraisons', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="GenerateCodes" component={GenerateCodesScreen} options={{ headerShown: true, headerTitle: 'Générer des codes', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="DashboardAdmin" component={DashboardAdminScreen} options={{ headerShown: true, headerTitle: 'Tableau de bord', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="HistoriqueAbonnement" component={HistoriqueAbonnementScreen} options={{ headerShown: true, headerTitle: 'Historique abonnement', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />

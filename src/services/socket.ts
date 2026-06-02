@@ -44,6 +44,10 @@ export function connectSocket() {
     playNotificationSound(); showToast.warning(data.message || 'Notification admin');
   });
 
+  socket.on('commande_prete', (data: any) => {
+    playNotificationSound(); showToast.success(`📢 ${data.message || 'Commande prête — Table ' + (data.tableNumero || '?')}`);
+  });
+
   socket.on('demande_facture', (data: any) => {
     playNotificationSound(); showToast.warning(`🧾 Demande d'addition — Table ${data.tableNumero || '?'}`);
   });

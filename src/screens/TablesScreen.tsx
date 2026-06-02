@@ -68,6 +68,12 @@ export default function TablesScreen() {
     }
   };
 
+  // Polling automatique (15 secondes)
+  useEffect(() => {
+    const interval = setInterval(() => { loadTables(); }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     loadTables();
     const socket = getSocket();

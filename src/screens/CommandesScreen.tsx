@@ -91,6 +91,12 @@ export default function CommandesScreen() {
     }
   };
 
+  // Polling automatique (15 secondes)
+  useEffect(() => {
+    const interval = setInterval(() => { loadCommandes(); }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     loadCommandes();
     const socket = getSocket();

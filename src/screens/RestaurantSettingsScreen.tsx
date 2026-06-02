@@ -36,6 +36,7 @@ export default function RestaurantSettingsScreen() {
   const [adresse, setAdresse] = useState('');
   const [telephone, setTelephone] = useState('');
   const [devise, setDevise] = useState('');
+  const [modeGestion, setModeGestion] = useState('RECEPTION');
   const [loading, setLoading] = useState(false);
 
   // Clôture globale
@@ -58,6 +59,7 @@ export default function RestaurantSettingsScreen() {
         setAdresse(data.adresse || '');
         setTelephone(data.telephone || '');
         setDevise(data.devise || '');
+        setModeGestion(data.modeGestion || 'RECEPTION');
         setStatutResto(data.statut || 'OUVERT');
         if (data.dateReouverture) {
           const d = new Date(data.dateReouverture);
@@ -117,6 +119,7 @@ export default function RestaurantSettingsScreen() {
         adresse: adresse.trim(),
         telephone: telephone.trim(),
         devise: devise.trim(),
+        modeGestion,
       });
       dispatch(updateUser({
         restaurantNom: data.nom,
@@ -225,6 +228,24 @@ export default function RestaurantSettingsScreen() {
 
             <Text style={styles.label}>Devise (€, Fcfa, $)</Text>
             <TextInput style={styles.input} value={devise} onChangeText={setDevise} placeholder="Ex: €, FC, $" placeholderTextColor={Colors.textLight} maxLength={10} />
+
+            <Text style={styles.label}>Mode de gestion des commandes</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+              <TouchableOpacity
+                style={[styles.modeBtn, modeGestion === 'RECEPTION' && styles.modeBtnActive]}
+                onPress={() => setModeGestion('RECEPTION')}
+              >
+                <Text style={[styles.modeBtnText, modeGestion === 'RECEPTION' && styles.modeBtnTextActive]}>📋 Centralisé</Text>
+                <Text style={styles.modeBtnDesc}>La réception valide les commandes</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeBtn, modeGestion === 'SERVEUR' && styles.modeBtnActive]}
+                onPress={() => setModeGestion('SERVEUR')}
+              >
+                <Text style={[styles.modeBtnText, modeGestion === 'SERVEUR' && styles.modeBtnTextActive]}>👤 Serveur</Text>
+                <Text style={styles.modeBtnDesc}>Les serveurs valident leurs commandes</Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity style={[styles.saveBtn, loading && { opacity: 0.6 }]} onPress={handleSave} disabled={loading}>
               {loading ? <ActivityIndicator color={Colors.textWhite} /> : <Text style={styles.saveBtnText}>Enregistrer les modifications</Text>}
@@ -435,4 +456,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 2, borderTopColor: Colors.primary + '30',
   },
   aboActivationTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginBottom: 12 },
+  modeBtn: {
+    flex: 1, backgroundColor: Colors.inputBg, borderRadius: 14, padding: 12,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center',
+  },
+  modeBtnActive: { backgroundColor: Colors.primary + '15', borderColor: Colors.primary },
+  modeBtnText: { fontSize: 14, fontWeight: '700', color: Colors.text, marginBottom: 4 },
+  modeBtnTextActive: { color: Colors.primary },
+  modeBtnDesc: { fontSize: 10, color: Colors.textLight, textAlign: 'center' },
 });

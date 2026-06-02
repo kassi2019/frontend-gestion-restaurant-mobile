@@ -134,6 +134,11 @@ export const commandesApi = {
     api.patch(`/commandes/${id}/statut`, { statut }),
   assignServeur: (id: number, serveurId: number) =>
     api.patch(`/commandes/${id}/assign-serveur`, { serveurId }),
+  assignerLivraison: (id: number, livreurId: number, adresse?: string, frais?: number) =>
+    api.patch(`/commandes/${id}/livraison`, { livreurId, adresse, frais }),
+  updateStatutLivraison: (id: number, statut: string) =>
+    api.patch(`/commandes/${id}/livraison/statut`, { statut }),
+  notifierPret: (id: number) => api.post(`/commandes/${id}/notifier-pret`),
   updateDetailStatut: (id: number, statut: string) =>
     api.patch(`/commandes/details/${id}/statut`, { statut }),
   toutPret: (tableId: number, destination: string) =>
@@ -160,6 +165,7 @@ export const notificationsApi = {
 
 export const paiementApi = {
   getAPayer: () => api.get('/paiements/a-payer'),
+  appliquerRemise: (commandeId: number, data: { type: string; valeur: number; motif?: string }) => api.patch(`/paiements/remise/${commandeId}`, data),
   payer: (commandeId: number, mode: string) => api.post(`/paiements/payer/${commandeId}`, { mode }),
   getFactures: (date?: string) => api.get('/paiements/factures', { params: date ? { date } : {} }),
   getFacture: (id: number) => api.get(`/paiements/factures/${id}`),
@@ -189,12 +195,29 @@ export const statistiquesApi = {
     api.get('/statistiques/affluence', { params: { debut, fin } }),
   getPerformanceCaissiers: (debut?: string, fin?: string) =>
     api.get('/statistiques/performance-caissiers', { params: { debut, fin } }),
+  getVentesParJour: (debut?: string, fin?: string) =>
+    api.get('/statistiques/ventes-par-jour', { params: { debut, fin } }),
+  getVentesParMois: (debut?: string, fin?: string) =>
+    api.get('/statistiques/ventes-par-mois', { params: { debut, fin } }),
+  getMargeBrute: (debut?: string, fin?: string) =>
+    api.get('/statistiques/marge-brute', { params: { debut, fin } }),
+  getPlatsMoinsVendus: (limit?: number, debut?: string, fin?: string) =>
+    api.get('/statistiques/plats-moins-vendus', { params: { limit, debut, fin } }),
 };
 
 export const restaurantApi = {
   getInfo: (id: number) => api.get(`/restaurants/${id}`),
-  update: (id: number, data: { nom?: string; adresse?: string; devise?: string; telephone?: string }) =>
+  update: (id: number, data: { nom?: string; adresse?: string; devise?: string; telephone?: string; modeGestion?: string }) =>
     api.patch(`/restaurants/${id}`, data),
+};
+
+export const reservationsApi = {
+  getAll: (date?: string) => api.get('/reservations', { params: date ? { date } : {} }),
+  create: (data: any) => api.post('/reservations', data),
+  update: (id: number, data: any) => api.patch(`/reservations/${id}`, data),
+  delete: (id: number) => api.delete(`/reservations/${id}`),
+  honorer: (id: number) => api.post(`/reservations/${id}/honorer`),
+  annuler: (id: number) => api.post(`/reservations/${id}/annuler`),
 };
 
 export const usersApi = {

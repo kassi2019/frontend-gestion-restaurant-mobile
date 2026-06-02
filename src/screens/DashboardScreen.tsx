@@ -105,6 +105,8 @@ export default function DashboardScreen() {
   const [showActionModal, setShowActionModal] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showRemise, setShowRemise] = useState(false);
+  const [remiseForm, setRemiseForm] = useState({ type: 'POURCENTAGE', valeur: '0', motif: '' });
 
   const handlePrintReceipt = () => {
     if (receiptData?.factureId) {
@@ -186,6 +188,12 @@ export default function DashboardScreen() {
       loadCuisineData();
     }, [loadUnreadNotifs, loadStats, loadCashierData, loadBarData, loadCuisineData])
   );
+
+  // Polling automatique en arrière-plan (toutes les 15 secondes)
+  useEffect(() => {
+    const interval = setInterval(() => { loadStats(); loadUnreadNotifs(); loadCashierData(); loadBarData(); loadCuisineData(); }, 15000);
+    return () => clearInterval(interval);
+  }, [loadStats, loadUnreadNotifs, loadCashierData, loadBarData, loadCuisineData]);
 
   useEffect(() => {
     loadStats();
@@ -342,6 +350,8 @@ export default function DashboardScreen() {
     { icon: '⭐', label: 'Abonnement', screen: 'RestaurantSettings', color: '#9333EA', roles: ['ADMIN'] },
     { icon: '🔒', label: 'Clôture', screen: 'RestaurantSettings', color: '#EF4444', roles: ['ADMIN'] },
     { icon: '📋', label: 'Réception', screen: 'Reception', color: '#7C3AED', roles: ['RECEPTIONNISTE'] },
+    { icon: '🪑', label: 'Réservations', screen: 'Reservations', color: '#E67E22', roles: ['ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
+    { icon: '🚚', label: 'Livraisons', screen: 'Livraisons', color: '#0284C7', roles: ['ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
     { icon: '📦', label: 'Stock', screen: 'Stock', color: '#16A34A', roles: ['ADMIN', 'MANAGER'] },
     { icon: '🔔', label: 'Notifications', screen: 'Notifications', color: '#E67E22', badge: unreadNotifs, roles: ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   ];
@@ -355,6 +365,8 @@ export default function DashboardScreen() {
     '/abonnement': 'RestaurantSettings', '/super/codes': 'GenerateCodes',
     '/stock': 'Stock',
     '/reception': 'Reception',
+    '/reservations': 'Reservations',
+    '/livraisons': 'Livraisons',
   };
   const dynamicMenu = user?.modules?.length ? user.modules.map(m => ({
     icon: m.icon, label: m.nom, screen: routeToScreen[m.route] || m.route.replace('/', '') || 'Main',
@@ -385,6 +397,28 @@ export default function DashboardScreen() {
       }
     };
 
+    const handleRemise = async () => {
+      if (!selectedCommande) return;
+      const v = parseFloat(remiseForm.valeur);
+      if (isNaN(v) || v <= 0) { showToast.error('Valeur invalide'); return; }
+      try {
+        const { data } = await paiementApi.appliquerRemise(selectedCommande.id, { type: remiseForm.type, valeur: v, motif: remiseForm.motif || undefined });
+        setSelectedCommande({ ...selectedCommande, montantTotal: parseFloat(data.montantFinal) });
+        setShowRemise(false);
+        showToast.success(`Remise appliquée : ${data.montantFinal} ${devise}`);
+        loadCashierData();
+      } catch (err: any) { showToast.error(err.response?.data?.message || 'Erreur'); }
+    };
+
+    const payerToutMobile = async (cmds: any[], mode: string) => {
+      let ok = 0;
+      for (const c of cmds) {
+        try { await paiementApi.payer(c.id, mode); ok++; } catch {}
+      }
+      showToast.success(`${ok} commande(s) payée(s)`);
+      loadCashierData();
+    };
+
     const handlePayer = async (mode: string) => {
       if (!selectedCommande) return;
       try {
@@ -413,7 +447,6 @@ export default function DashboardScreen() {
 
     const openCashierModal = async (type: 'apayer' | 'factures' | 'clotures') => {
       setCashierDetail(type);
-      setShowCashierModal(true);
       if (type === 'apayer') {
         try {
           const { data } = await paiementApi.getAPayer();
@@ -581,12 +614,12 @@ export default function DashboardScreen() {
                 const isExpanded = expandedTables.has(item.tableId);
                 return (
                   <View style={styles.tableGroup}>
-                    <TouchableOpacity
-                      style={styles.tableHeader}
-                      onPress={() => toggleTable(item.tableId)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.tableHeaderLeft}>
+                    <View style={styles.tableHeader}>
+                      <TouchableOpacity
+                        style={styles.tableHeaderLeft}
+                        onPress={() => toggleTable(item.tableId)}
+                        activeOpacity={0.7}
+                      >
                         <Text style={styles.tableIcon}>🪑</Text>
                         <View>
                           <Text style={styles.tableNumero}>Table {item.tableNumero}</Text>
@@ -594,9 +627,30 @@ export default function DashboardScreen() {
                             {item.commandes.length} commande{item.commandes.length > 1 ? 's' : ''} · {item.total.toFixed(2)} {devise}
                           </Text>
                         </View>
+                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        {item.commandes.length > 1 && (
+                          <TouchableOpacity
+                            style={{ backgroundColor: Colors.success, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 }}
+                            onPress={() => {
+                              Alert.alert(
+                                '💰 Payer toute la table ?',
+                                `${item.commandes.length} commande(s) · Total: ${item.total.toFixed(2)} ${devise}`,
+                                [
+                                  { text: 'Annuler', style: 'cancel' },
+                                  { text: '💵 Espèces', onPress: () => payerToutMobile(item.commandes, 'ESPECES') },
+                                  { text: '📱 Mobile', onPress: () => payerToutMobile(item.commandes, 'MOBILE_MONEY') },
+                                  { text: '💳 Carte', onPress: () => payerToutMobile(item.commandes, 'CARTE_BANCAIRE') },
+                                ]
+                              );
+                            }}
+                          >
+                            <Text style={{ color: Colors.textWhite, fontWeight: '700', fontSize: 11 }}>💰 Tout payer</Text>
+                          </TouchableOpacity>
+                        )}
+                        <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
                       </View>
-                      <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
-                    </TouchableOpacity>
+                    </View>
                     {isExpanded && (
                       <View style={styles.tableDetails}>
                         {item.commandes.map((cmd: any) => (
@@ -748,6 +802,7 @@ export default function DashboardScreen() {
           title={`Paiement ${selectedCommande?.numeroCommande || `CMD-${String(selectedCommande?.id || 0).padStart(4, '0')}`}`}
           subtitle={formatPrixDevise(selectedCommande?.montantTotal || 0, devise)}
           actions={[
+            { icon: '🏷️', label: 'Appliquer une remise', onPress: () => { setShowActionModal(false); setTimeout(() => setShowRemise(true), 300); } },
             { icon: '💵', label: 'Espèces', onPress: () => handlePayer('ESPECES') },
             { icon: '📱', label: 'Mobile Money', onPress: () => handlePayer('MOBILE_MONEY') },
             { icon: '💳', label: 'Carte Bancaire', onPress: () => handlePayer('CARTE_BANCAIRE') },
@@ -812,6 +867,34 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal Remise */}
+        <Modal visible={showRemise} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>🏷️ Appliquer une remise</Text>
+              <Text style={{ fontSize: 13, color: Colors.textLight, marginBottom: 16 }}>Commande #{String(selectedCommande?.id || 0).padStart(4, '0')} · {formatPrixDevise(selectedCommande?.montantTotal || 0, devise)}</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                <TouchableOpacity style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: remiseForm.type === 'POURCENTAGE' ? Colors.primary : Colors.inputBg, borderWidth: 1, borderColor: remiseForm.type === 'POURCENTAGE' ? Colors.primary : Colors.border }} onPress={() => setRemiseForm({...remiseForm, type: 'POURCENTAGE'})}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: remiseForm.type === 'POURCENTAGE' ? Colors.textWhite : Colors.text }}>% Pourcentage</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: remiseForm.type === 'MONTANT' ? Colors.primary : Colors.inputBg, borderWidth: 1, borderColor: remiseForm.type === 'MONTANT' ? Colors.primary : Colors.border }} onPress={() => setRemiseForm({...remiseForm, type: 'MONTANT'})}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: remiseForm.type === 'MONTANT' ? Colors.textWhite : Colors.text }}>{devise} Montant</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                <TextInput style={[styles.searchInput, { flex: 1 }]} placeholder={remiseForm.type === 'POURCENTAGE' ? 'Ex: 10' : 'Ex: 500'} keyboardType="numeric" value={remiseForm.valeur} onChangeText={(t) => setRemiseForm({...remiseForm, valeur: t})} />
+                <TextInput style={[styles.searchInput, { flex: 2 }]} placeholder="Motif (optionnel)" value={remiseForm.motif} onChangeText={(t) => setRemiseForm({...remiseForm, motif: t})} />
+              </View>
+              <TouchableOpacity style={{ backgroundColor: Colors.success, borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 12 }} onPress={handleRemise}>
+                <Text style={{ color: Colors.textWhite, fontWeight: '800', fontSize: 15 }}>🏷️ Appliquer la remise</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 6 }} onPress={() => setShowRemise(false)}>
+                <Text style={{ color: Colors.textLight, fontSize: 14 }}>Annuler</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
@@ -1446,7 +1529,7 @@ export default function DashboardScreen() {
                               {/* Actions selon le rôle */}
                               <View style={styles.orderActions}>
                                 {cmd.statut === 'EN_ATTENTE' && canValidate && (
-                                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.success }]} onPress={() => handleUpdateStatut(cmd.id, 'VALIDEE')}>
+                                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: Colors.success }]} onPress={() => handleUpdateStatut(cmd.id, 'SERVEUR_VALIDE')}>
                                     <Text style={styles.actionText}>✓ Valider</Text>
                                   </TouchableOpacity>
                                 )}
