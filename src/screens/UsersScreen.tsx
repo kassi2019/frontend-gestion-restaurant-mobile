@@ -10,6 +10,7 @@ import {
   Modal,
   TextInput,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
@@ -269,6 +270,7 @@ export default function UsersScreen() {
       <Modal visible={showCreateModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: '80%' }}>
             <Text style={styles.modalTitle}>Nouvel Utilisateur</Text>
             <Text style={styles.fieldLabel}>Nom</Text>
             <TextInput style={styles.field} placeholder="Ex: Jean Dupont" value={createForm.nom} onChangeText={(t) => setCreateForm({ ...createForm, nom: t })} />
@@ -315,6 +317,7 @@ export default function UsersScreen() {
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
             </View>
+            </ScrollView>
           </View>
         </View>
         <ModalPicker

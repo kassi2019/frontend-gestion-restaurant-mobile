@@ -33,6 +33,7 @@ export default function PlanningScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
   const [showCreateDatePicker, setShowCreateDatePicker] = useState(false);
+  const [showCreateDateFinPicker, setShowCreateDateFinPicker] = useState(false);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [createFilterRole, setCreateFilterRole] = useState('');
   const [showFilterRole, setShowFilterRole] = useState(false);
@@ -41,7 +42,8 @@ export default function PlanningScreen() {
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [selectedPlanning, setSelectedPlanning] = useState<any>(null);
   const [serveurs, setServeurs] = useState<any[]>([]);
-  const [form, setForm] = useState({ jour: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
+  const [form, setForm] = useState({ jour: '', dateFin: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
+  const [joursSelectionnes, setJoursSelectionnes] = useState<number[]>([1,2,3,4,5,6,0]); // 0=Dim,1=Lun...6=Sam, tous cochés par défaut
   const [editForm, setEditForm] = useState({ id: 0, jour: '', heureDebut: '', heureFin: '' });
   const [filterDate, setFilterDate] = useState(toDateStr(new Date()));
   const [filterUserId, setFilterUserId] = useState(0);
@@ -135,7 +137,14 @@ export default function PlanningScreen() {
       } catch (e) { setServeurs([]); }
     }
     setCreateFilterRole('');
-    setForm({ jour: filterDate, heureDebut: '08:00', heureFin: '17:00', utilisateurId: isManager ? 0 : user!.id });
+    setForm({ jour: filterDate, dateFin: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: isManager ? 0 : user!.id });
+    // Pré-remplir jours selon repos utilisateur
+    const ut = isManager && form.utilisateurId ? serveurs.find(s => s.id === form.utilisateurId) : user;
+    const repos = (ut as any)?.joursRepos;
+    if (repos) {
+      const reposArray = repos.split(',').map(Number).filter((n: number) => !isNaN(n));
+      setJoursSelectionnes([0,1,2,3,4,5,6].filter(d => !reposArray.includes(d)));
+    } else { setJoursSelectionnes([0,1,2,3,4,5,6]); }
     setShowCreateModal(true);
   };
 
@@ -150,12 +159,41 @@ export default function PlanningScreen() {
         heureDebut: form.heureDebut,
         heureFin: form.heureFin,
       });
-      setForm({ jour: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
+      setForm({ jour: '', dateFin: '', heureDebut: '08:00', heureFin: '17:00', utilisateurId: 0 });
       showToast.success('Planning créé');
       loadPlannings();
     } catch (err: any) {
       showToast.error(err.response?.data?.message || 'Impossible de créer le planning');
     }
+  };
+
+  const JOURS_NOMS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+  const handleCreerTout = async () => {
+    if (!form.jour || !form.dateFin) { showToast.error('Dates début et fin requises'); return; }
+    const uid = isManager ? form.utilisateurId : user!.id;
+    if (!uid) { showToast.error('Sélectionnez une personne'); return; }
+    // Sauvegarder les jours de repos dans le profil
+    const repos = [0,1,2,3,4,5,6].filter(d => !joursSelectionnes.includes(d)).join(',');
+    try { await usersApi.update(uid, { joursRepos: repos } as any); } catch {}
+    const debut = new Date(form.jour + 'T00:00:00');
+    const fin = new Date(form.dateFin + 'T00:00:00');
+    if (fin < debut) { showToast.error('Date fin < date début'); return; }
+    let ok = 0;
+    const current = new Date(debut);
+    while (current <= fin) {
+      const js = current.getDay();
+      if (joursSelectionnes.includes(js)) {
+        try {
+          await planningApi.create({ utilisateurId: uid, jour: toDateStr(current), heureDebut: form.heureDebut, heureFin: form.heureFin });
+          ok++;
+        } catch {}
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    showToast.success(`${ok} planning(s) créé(s)`);
+    setShowCreateModal(false);
+    loadPlannings();
   };
 
   const handleEdit = async () => {
@@ -468,9 +506,29 @@ export default function PlanningScreen() {
                   )}
                 </>
               )}
+              {/* Date fin + Jours + Créer tout */}
+              <Text style={styles.fieldLabel}>Date fin (intervalle)</Text>
+              <TouchableOpacity style={styles.dateField} onPress={() => setShowCreateDateFinPicker(true)}>
+                <Text style={form.dateFin ? styles.dateFieldText : styles.dateFieldPlaceholder}>
+                  {form.dateFin ? formatDisplay(form.dateFin) : 'Même date si vide'}
+                </Text>
+                <Text style={styles.dateFieldIcon}>📅</Text>
+              </TouchableOpacity>
+              <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Jours travaillés</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                {JOURS_NOMS.map((nom, idx) => (
+                  <TouchableOpacity key={idx}
+                    style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: joursSelectionnes.includes(idx) ? Colors.primary : Colors.inputBg, borderWidth: 1, borderColor: joursSelectionnes.includes(idx) ? Colors.primary : Colors.border }}
+                    onPress={() => setJoursSelectionnes(prev => prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx])}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: joursSelectionnes.includes(idx) ? Colors.textWhite : Colors.textLight }}>{nom}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
               <View style={styles.modalBtns}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.saveBtn} onPress={handleCreate}><Text style={styles.saveText}>Créer</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.saveBtn, { backgroundColor: Colors.accent, marginLeft: 8 }]} onPress={handleCreerTout}><Text style={styles.saveText}>📆 Créer tout</Text></TouchableOpacity>
               </View>
             </ScrollView>
           </View>
@@ -485,6 +543,12 @@ export default function PlanningScreen() {
         value={form.jour}
         onSelect={(dateStr) => setForm({ ...form, jour: dateStr })}
         onClose={() => setShowCreateDatePicker(false)}
+      />
+      <CalendarPicker
+        visible={showCreateDateFinPicker}
+        value={form.dateFin || form.jour}
+        onSelect={(dateStr) => setForm({ ...form, dateFin: dateStr })}
+        onClose={() => setShowCreateDateFinPicker(false)}
       />
 
       {/* Edit Modal */}
