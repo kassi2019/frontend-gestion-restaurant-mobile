@@ -8,17 +8,19 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { updateUser } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
-import { restaurantApi, paiementApi, authApi } from '../services/api';
+import { restaurantApi, paiementApi, authApi, zonesApi, tablesApi } from '../services/api';
 import { showToast } from '../services/toast';
 import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 const MENUS = [
   { key: 'infos',   icon: '🏪', label: 'Info du restaurant' },
+  { key: 'zones',   icon: '🏷️', label: 'Zones tarifaires' },
   { key: 'abonnement', icon: '⭐', label: 'Abonnement' },
   { key: 'cloture', icon: '🔒', label: 'Clôture Globale' },
 ];
@@ -52,6 +54,13 @@ export default function RestaurantSettingsScreen() {
   const [aboCode, setAboCode] = useState('');
   const [aboActivationLoading, setAboActivationLoading] = useState(false);
 
+  // Zones
+  const [zones, setZones] = useState<any[]>([]);
+  const [tables, setTables] = useState<any[]>([]);
+  const [showZoneForm, setShowZoneForm] = useState(false);
+  const [editingZone, setEditingZone] = useState<any>(null);
+  const [zoneForm, setZoneForm] = useState({ nom: '', coefficient: '1.0' });
+
   useEffect(() => {
     if (user?.restaurantId) {
       restaurantApi.getInfo(user.restaurantId).then(({ data }) => {
@@ -72,6 +81,10 @@ export default function RestaurantSettingsScreen() {
 
   // Charger le statut d'abonnement quand le menu abonnement est actif
   useEffect(() => {
+    if (activeMenu === 'zones') {
+      zonesApi.getAll().then(r => setZones(r.data || [])).catch(() => {});
+      tablesApi.getAll().then(r => setTables(r.data || [])).catch(() => {});
+    }
     if (activeMenu === 'abonnement') {
       setAboLoading(true);
       authApi.getAbonnement()
@@ -170,6 +183,16 @@ export default function RestaurantSettingsScreen() {
     );
   };
 
+  const handleSaveZone = async () => {
+    if (!zoneForm.nom) { showToast.error('Nom requis'); return; }
+    const c = parseFloat(zoneForm.coefficient) || 1.0;
+    try {
+      if (editingZone) { await zonesApi.update(editingZone.id, { nom: zoneForm.nom, coefficient: c }); showToast.success('Zone modifiée'); }
+      else { await zonesApi.create({ nom: zoneForm.nom, coefficient: c }); showToast.success('Zone créée'); }
+      setShowZoneForm(false); zonesApi.getAll().then(r => setZones(r.data || [])).catch(() => {});
+    } catch { showToast.error('Erreur'); }
+  };
+
   const handleReouverture = () => {
     Alert.alert(
       'Réouvrir le restaurant',
@@ -249,6 +272,29 @@ export default function RestaurantSettingsScreen() {
 
             <TouchableOpacity style={[styles.saveBtn, loading && { opacity: 0.6 }]} onPress={handleSave} disabled={loading}>
               {loading ? <ActivityIndicator color={Colors.textWhite} /> : <Text style={styles.saveBtnText}>Enregistrer les modifications</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ========== ZONES ========== */}
+        {activeMenu === 'zones' && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>🏷️ Zones tarifaires</Text>
+            {zones.map(zone => (
+              <View key={zone.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '600', color: Colors.text }}>{zone.nom}</Text>
+                  <Text style={{ fontSize: 12, color: Colors.textLight }}>x{Number(zone.coefficient).toFixed(1)} · {zone.tables?.length || 0} table(s)</Text>
+                </View>
+                <TouchableOpacity onPress={() => { setEditingZone(zone); setZoneForm({ nom: zone.nom, coefficient: String(zone.coefficient) }); setShowZoneForm(true); }}
+                  style={{ padding: 6 }}><Text>✏️</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => { Alert.alert('Supprimer ?', '', [{ text: 'Annuler' }, { text: 'Supprimer', style: 'destructive', onPress: async () => { await zonesApi.delete(zone.id); zonesApi.getAll().then(r => setZones(r.data || [])).catch(() => {}); } }]); }}
+                  style={{ padding: 6 }}><Text>🗑</Text></TouchableOpacity>
+              </View>
+            ))}
+            {zones.length === 0 && <Text style={{ color: Colors.textLight, fontSize: 13, textAlign: 'center', padding: 20 }}>Aucune zone. Créez des zones (VIP, VVIP...).</Text>}
+            <TouchableOpacity style={[styles.saveBtn, { marginTop: 16 }]} onPress={() => { setEditingZone(null); setZoneForm({ nom: '', coefficient: '1.0' }); setShowZoneForm(true); }}>
+              <Text style={styles.saveBtnText}>+ Ajouter une zone</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -390,6 +436,25 @@ export default function RestaurantSettingsScreen() {
       </ScrollView>
 
       <CalendarPicker visible={showDatePicker} value={dateReouverture} onSelect={(d) => { setDateReouverture(d); setShowDatePicker(false); }} onClose={() => setShowDatePicker(false)} />
+
+      {/* Modal Zone */}
+      <Modal visible={showZoneForm} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.text, marginBottom: 16 }}>{editingZone ? 'Modifier' : 'Nouvelle'} zone</Text>
+            <TextInput style={{ height: 46, backgroundColor: Colors.inputBg, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, marginBottom: 10, fontSize: 14, color: Colors.text }} placeholder="Nom (ex: VIP)" value={zoneForm.nom} onChangeText={t => setZoneForm({...zoneForm, nom: t})} />
+            <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.text, marginBottom: 6 }}>Coefficient</Text>
+            <TextInput style={{ height: 46, backgroundColor: Colors.inputBg, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, marginBottom: 10, fontSize: 14, color: Colors.text }} placeholder="1.0" keyboardType="numeric" value={zoneForm.coefficient} onChangeText={t => setZoneForm({...zoneForm, coefficient: t})} />
+            <Text style={{ fontSize: 12, color: Colors.textLight, marginBottom: 16 }}>1.0 = prix normal · 1.2 = +20% · 1.5 = +50%</Text>
+            <TouchableOpacity style={{ backgroundColor: Colors.primary, borderRadius: 14, padding: 14, alignItems: 'center' }} onPress={handleSaveZone}>
+              <Text style={{ color: Colors.textWhite, fontWeight: '800', fontSize: 15 }}>Enregistrer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 6 }} onPress={() => setShowZoneForm(false)}>
+              <Text style={{ color: Colors.textLight, fontSize: 14 }}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

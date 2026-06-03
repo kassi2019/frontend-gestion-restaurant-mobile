@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,13 @@ import {
   Alert,
   Modal,
   TextInput,
+  ScrollView,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { RootState } from '../store';
 import { Colors } from '../theme/colors';
-import { tablesApi, serveurTablesApi, usersApi, commandesApi } from '../services/api';
+import { tablesApi, serveurTablesApi, usersApi, commandesApi, zonesApi } from '../services/api';
 import { getSocket } from '../services/socket';
 import { showToast } from '../services/toast';
 import ModalPicker from '../components/ModalPicker';
@@ -44,21 +45,25 @@ export default function TablesScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [newTable, setNewTable] = useState({ numero: '', zone: 'Terrasse' });
-  const [editTable, setEditTable] = useState({ id: 0, numero: '', zone: '' });
+  const [newTable, setNewTable] = useState({ numero: '', zone: 'Terrasse', zoneId: 0 });
+  const [editTable, setEditTable] = useState({ id: 0, numero: '', zone: '', zoneId: 0 });
+  const [zonesTarif, setZonesTarif] = useState<any[]>([]);
   const [serveurs, setServeurs] = useState<any[]>([]);
 
   const loadTables = async () => {
     try {
       if (canViewAll) {
         const { data } = await tablesApi.getAll();
-        setTables(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        list.sort((a: any, b: any) => (a.zoneTarif?.nom || a.zone || '').localeCompare(b.zoneTarif?.nom || b.zone || ''));
+        setTables(list);
       } else {
         // Serveur : utilise serveur_tables (affectation basée sur le planning du jour)
         const { data } = await serveurTablesApi.findByServeur();
         const assignedTables = Array.isArray(data)
           ? data.map((a: any) => a.table).filter(Boolean)
           : [];
+        assignedTables.sort((a: any, b: any) => (a.zoneTarif?.nom || a.zone || '').localeCompare(b.zoneTarif?.nom || b.zone || ''));
         setTables(assignedTables);
       }
     } catch (err) {
@@ -66,6 +71,7 @@ export default function TablesScreen() {
     } finally {
       setLoading(false);
     }
+    zonesApi.getAll().then(r => setZonesTarif(r.data || [])).catch(() => {});
   };
 
   // Polling automatique (15 secondes)
@@ -110,7 +116,7 @@ export default function TablesScreen() {
     if (!newTable.numero.trim()) return Alert.alert('Erreur', 'Le numéro est requis');
     try {
       await tablesApi.create(newTable);
-      setNewTable({ numero: '', zone: 'Terrasse' });
+      setNewTable({ numero: '', zone: 'Terrasse', zoneId: 0 });
       showToast.success(`Table ${newTable.numero} créée`);
       loadTables();
     } catch (err: any) {
@@ -121,7 +127,7 @@ export default function TablesScreen() {
   const handleEdit = async () => {
     if (!editTable.numero.trim()) return Alert.alert('Erreur', 'Le numéro est requis');
     try {
-      await tablesApi.update(editTable.id, { numero: editTable.numero, zone: editTable.zone });
+      await tablesApi.update(editTable.id, { numero: editTable.numero, zone: editTable.zone, zoneId: editTable.zoneId || undefined });
       setShowEditModal(false);
       showToast.success(`Table ${editTable.numero} modifiée`);
       loadTables();
@@ -232,6 +238,18 @@ export default function TablesScreen() {
     { label: 'Réservée', value: 'RESERVEE' },
   ];
 
+  // Grouper les tables par zone tarifaire, trié par coefficient croissant
+  const tablesGroupees = useMemo(() => {
+    const groupes: Record<string, { coef: number; tables: any[] }> = {};
+    for (const t of tables) {
+      const cle = t.zoneTarif?.nom || t.zone || 'Sans zone';
+      if (!groupes[cle]) groupes[cle] = { coef: t.zoneTarif ? Number(t.zoneTarif.coefficient) : 1.0, tables: [] };
+      groupes[cle].tables.push(t);
+    }
+    // Trier par coefficient croissant
+    return Object.entries(groupes).sort((a, b) => a[1].coef - b[1].coef);
+  }, [tables]);
+
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -242,38 +260,46 @@ export default function TablesScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={tables}
-        keyExtractor={(item) => item.id.toString()}
-        numColumns={columns}
+      <ScrollView
         contentContainerStyle={[styles.list, { paddingHorizontal: sp(8) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => handleTablePress(item)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.statusDot, { backgroundColor: STATUT_COLORS[item.statut] }]} />
-            <Text style={styles.tableNum} numberOfLines={1}>Table {item.numero}</Text>
-            <Text style={styles.zone} numberOfLines={1}>{item.zone}</Text>
-            <View style={[styles.statutBadge, { backgroundColor: STATUT_COLORS[item.statut] + '18' }]}>
-              <Text style={[styles.statutText, { color: STATUT_COLORS[item.statut] }]} numberOfLines={1}>
-                {item.statut === 'LIBRE' ? 'Libre' : item.statut === 'OCCUPEE' ? 'Occup.' : 'Réserv.'}
-              </Text>
+      >
+        {tablesGroupees.map(([zoneNom, zoneData]: [string, any]) => (
+          <View key={zoneNom}>
+            <Text style={styles.zoneHeader}>
+              🏷️ {zoneNom} {zoneData.tables[0]?.zoneTarif ? `x${zoneData.coef.toFixed(1)}` : ''}
+              <Text style={styles.zoneCount}> ({zoneData.tables.length})</Text>
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {zoneData.tables.map((item: any) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.card, { width: '18%', margin: 4, padding: 8 }]}
+                  onPress={() => handleTablePress(item)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.statusDot, { backgroundColor: STATUT_COLORS[item.statut] }]} />
+                  <Text style={styles.tableNum} numberOfLines={1}>{item.numero}</Text>
+                  <View style={[styles.statutBadge, { backgroundColor: STATUT_COLORS[item.statut] + '18' }]}>
+                    <Text style={[styles.statutText, { color: STATUT_COLORS[item.statut] }]} numberOfLines={1}>
+                      {item.statut === 'LIBRE' ? 'Libre' : item.statut === 'OCCUPEE' ? 'Occup.' : 'Réserv.'}
+                    </Text>
+                  </View>
+                  {item.serveur && (
+                    <Text style={styles.serveur}>👤 {item.serveur.nom}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
             </View>
-            {item.serveur && (
-              <Text style={styles.serveur}>👤 {item.serveur.nom}</Text>
-            )}
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
+          </View>
+        ))}
+        {tables.length === 0 && (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>🪑</Text>
             <Text style={styles.emptyText}>Aucune table trouvée</Text>
           </View>
-        }
-      />
+        )}
+      </ScrollView>
 
       {canViewAll && (
         <>
@@ -295,7 +321,7 @@ export default function TablesScreen() {
           { icon: '🔄', label: 'Changer statut', onPress: () => { setShowActionModal(false); setShowStatutModal(true); } },
           { icon: '👤', label: selectedTable?.serveur ? 'Réassigner serveur' : 'Assigner serveur', onPress: () => { setShowActionModal(false); openAssignModal(); } },
           { icon: '📱', label: 'Voir QR Code', onPress: () => { setShowActionModal(false); handleShowQrCode(); } },
-          { icon: '✏️', label: 'Modifier', onPress: () => { setShowActionModal(false); setEditTable({ id: selectedTable?.id || 0, numero: selectedTable?.numero || '', zone: selectedTable?.zone || '' }); setShowEditModal(true); } },
+          { icon: '✏️', label: 'Modifier', onPress: () => { setShowActionModal(false); setEditTable({ id: selectedTable?.id || 0, numero: selectedTable?.numero || '', zone: selectedTable?.zone || '', zoneId: selectedTable?.zoneId || 0 }); setShowEditModal(true); } },
           { icon: '🗑', label: 'Supprimer', danger: true, onPress: () => { setShowActionModal(false); handleDelete(selectedTable); } },
         ]}
         onClose={() => setShowActionModal(false)}
@@ -320,14 +346,18 @@ export default function TablesScreen() {
             <Text style={styles.fieldLabel}>Numéro</Text>
             <TextInput style={styles.field} placeholder="Ex: T11" value={newTable.numero} onChangeText={(t) => setNewTable({ ...newTable, numero: t })} />
 
-            <Text style={styles.fieldLabel}>Zone</Text>
-            <View style={styles.chipRow}>
-              {ZONES.map((z) => (
-                <TouchableOpacity key={z} style={[styles.optChip, newTable.zone === z && styles.optChipActive]} onPress={() => setNewTable({ ...newTable, zone: z })}>
-                  <Text style={newTable.zone === z ? styles.optChipTextActive : styles.optChipText}>{z}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {zonesTarif.length > 0 && (
+              <>
+                <Text style={styles.fieldLabel}>Zone tarifaire</Text>
+                <View style={styles.chipRow}>
+                  {zonesTarif.map((z: any) => (
+                    <TouchableOpacity key={z.id} style={[styles.optChip, newTable.zoneId === z.id && styles.optChipActive]} onPress={() => setNewTable({ ...newTable, zoneId: z.id })}>
+                      <Text style={newTable.zoneId === z.id ? styles.optChipTextActive : styles.optChipText}>{z.nom} (x{z.coefficient})</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCreateModal(false)}>
@@ -350,14 +380,18 @@ export default function TablesScreen() {
             <Text style={styles.fieldLabel}>Numéro</Text>
             <TextInput style={styles.field} placeholder="Ex: T11" value={editTable.numero} onChangeText={(t) => setEditTable({ ...editTable, numero: t })} />
 
-            <Text style={styles.fieldLabel}>Zone</Text>
-            <View style={styles.chipRow}>
-              {ZONES.map((z) => (
-                <TouchableOpacity key={z} style={[styles.optChip, editTable.zone === z && styles.optChipActive]} onPress={() => setEditTable({ ...editTable, zone: z })}>
-                  <Text style={editTable.zone === z ? styles.optChipTextActive : styles.optChipText}>{z}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {zonesTarif.length > 0 && (
+              <>
+                <Text style={styles.fieldLabel}>Zone tarifaire</Text>
+                <View style={styles.chipRow}>
+                  {zonesTarif.map((z: any) => (
+                    <TouchableOpacity key={z.id} style={[styles.optChip, editTable.zoneId === z.id && styles.optChipActive]} onPress={() => setEditTable({ ...editTable, zoneId: z.id })}>
+                      <Text style={editTable.zoneId === z.id ? styles.optChipTextActive : styles.optChipText}>{z.nom} (x{z.coefficient})</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowEditModal(false)}>
@@ -469,8 +503,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
   },
   statusDot: { width: 10, height: 10, borderRadius: 5, position: 'absolute', top: 8, right: 8 },
-  tableNum: { fontSize: 14, fontWeight: '700', color: Colors.text, marginTop: 8, textAlign: 'center' },
+  tableNum: { fontSize: 13, fontWeight: '700', color: Colors.text, marginTop: 6, textAlign: 'center' },
   zone: { fontSize: 11, color: Colors.textLight, marginTop: 3, textAlign: 'center' },
+  zoneHeader: { fontSize: 14, fontWeight: '700', color: Colors.text, paddingHorizontal: 12, marginTop: 16, marginBottom: 8 },
+  zoneCount: { fontSize: 12, fontWeight: '400', color: Colors.textLight },
   statutBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2, marginTop: 6, alignSelf: 'center' },
   statutText: { fontSize: 10, fontWeight: '600' },
   serveur: { fontSize: 12, color: Colors.textLight, marginTop: 8 },

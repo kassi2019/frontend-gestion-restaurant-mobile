@@ -27,19 +27,21 @@ import { showToast } from '../services/toast';
 const STATUT_COLORS: Record<string, string> = {
   EN_ATTENTE: '#FF9800',
   VALIDEE: '#2196F3',
+  SERVEUR_VALIDE: '#2196F3',
+  RECEPTION_VALIDE: '#4CAF50',
   EN_PREPARATION: '#E86B2A',
-  PRETE: '#4CAF50',
-  SERVIE: '#9C27B0',
-  PAYEE: '#607D8B',
+  PRETE: '#9C27B0',
+  PAYEE: '#9C27B0',
   ANNULEE: '#f44336',
 };
 
 const STATUT_LABELS: Record<string, string> = {
   EN_ATTENTE: 'En attente',
   VALIDEE: 'Validée',
-  EN_PREPARATION: 'En préparation',
+  SERVEUR_VALIDE: 'Serv. validé',
+  RECEPTION_VALIDE: 'Réc. validé',
+  EN_PREPARATION: 'En prépa',
   PRETE: 'Prête',
-  SERVIE: 'Servie',
   PAYEE: 'Payée',
   ANNULEE: 'Annulée',
 };
@@ -66,11 +68,10 @@ export default function DashboardScreen() {
     totalTables: 0,
     totalCommandes: 0,
     enAttente: 0,
-    validees: 0,
-    enPreparation: 0,
-    pretes: 0,
-    servies: 0,
+    serveurValide: 0,
+    receptionValide: 0,
     payees: 0,
+    annulees: 0,
   });
   const [refreshing, setRefreshing] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
@@ -329,12 +330,31 @@ export default function DashboardScreen() {
     SERVEUR: 'Serveur', CUISINE: 'Cuisine', BAR: 'Bar', CAISSIER: 'Caissier',
   };
 
+  const commandesParTableCuisine = useMemo(() => {
+    if (!isCuisine) return [];
+    const maintenant = Date.now();
+    const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number; passeeDepuis: number }> = {};
+    for (const cmd of cuisineOrders) {
+      const tId = cmd.tableId || cmd.table?.id;
+      if (!tId) continue;
+      const numero = cmd.table?.numero || `Table ${tId}`;
+      if (!grouped[tId]) {
+        grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0, passeeDepuis: Date.now() - new Date(cmd.dateCommande).getTime() };
+      }
+      grouped[tId].commandes.push(cmd);
+      grouped[tId].total += Number(cmd.montantTotal);
+      const d = Date.now() - new Date(cmd.dateCommande).getTime();
+      if (d < grouped[tId].passeeDepuis) grouped[tId].passeeDepuis = d;
+    }
+    return Object.values(grouped).sort((a, b) => a.passeeDepuis - b.passeeDepuis);
+  }, [cuisineOrders, isCuisine]);
+
   const commandeCards = [
     { title: 'En attente', value: stats.enAttente, icon: '⏳', color: Colors.warning },
-    { title: 'Validees', value: stats.validees, icon: '✅', color: Colors.success },
-    { title: 'En prepa.', value: stats.enPreparation, icon: '👨‍🍳', color: Colors.accent },
-    { title: 'Pretes', value: stats.pretes, icon: '🍽', color: Colors.primary },
-    { title: 'Servies', value: stats.servies, icon: '📋', color: Colors.secondary },
+    { title: 'Serv. validé', value: stats.serveurValide, icon: '👤', color: '#2196F3' },
+    { title: 'Réc. validé', value: stats.receptionValide, icon: '✅', color: Colors.success },
+    { title: 'Payées', value: stats.payees, icon: '💰', color: '#9C27B0' },
+    { title: 'Annulées', value: stats.annulees, icon: '✕', color: Colors.danger },
   ];
 
   const menuItems = [
@@ -1170,27 +1190,6 @@ export default function DashboardScreen() {
       </ScrollView>
     );
   }
-
-  // useMemo pour la cuisine (déplacé ici pour respecter les règles des hooks)
-  const commandesParTableCuisine = useMemo(() => {
-    if (!isCuisine) return [];
-    const maintenant = Date.now();
-    const grouped: Record<number, { tableId: number; tableNumero: string; commandes: any[]; total: number; passeeDepuis: number }> = {};
-    for (const cmd of cuisineOrders) {
-      const tId = cmd.tableId || cmd.table?.id;
-      if (!tId) continue;
-      const numero = cmd.table?.numero || `Table ${tId}`;
-      if (!grouped[tId]) {
-        const dateCmd = new Date(cmd.dateCommande).getTime();
-        grouped[tId] = { tableId: tId, tableNumero: numero, commandes: [], total: 0, passeeDepuis: Math.floor((maintenant - dateCmd) / 60000) };
-      }
-      grouped[tId].commandes.push(cmd);
-      grouped[tId].total += totalDetails(cmd);
-    }
-    const liste = Object.values(grouped);
-    liste.sort((a, b) => b.passeeDepuis - a.passeeDepuis);
-    return liste;
-  }, [cuisineOrders, isCuisine]);
 
   // ============ CUISINE DASHBOARD ============
   if (isCuisine) {
