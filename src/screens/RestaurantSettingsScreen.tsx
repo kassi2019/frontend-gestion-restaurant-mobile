@@ -268,6 +268,13 @@ export default function RestaurantSettingsScreen() {
                 <Text style={[styles.modeBtnText, modeGestion === 'SERVEUR' && styles.modeBtnTextActive]}>👤 Serveur</Text>
                 <Text style={styles.modeBtnDesc}>Les serveurs valident leurs commandes</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeBtn, modeGestion === 'CAISSE' && styles.modeBtnActive]}
+                onPress={() => setModeGestion('CAISSE')}
+              >
+                <Text style={[styles.modeBtnText, modeGestion === 'CAISSE' && styles.modeBtnTextActive]}>🏪 Caisse</Text>
+                <Text style={styles.modeBtnDesc}>Saisie et encaissement direct</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={[styles.saveBtn, loading && { opacity: 0.6 }]} onPress={handleSave} disabled={loading}>
@@ -522,11 +529,11 @@ const styles = StyleSheet.create({
   },
   aboActivationTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginBottom: 12 },
   modeBtn: {
-    flex: 1, backgroundColor: Colors.inputBg, borderRadius: 14, padding: 12,
-    borderWidth: 1, borderColor: Colors.border, alignItems: 'center',
+    flex: 1, backgroundColor: Colors.inputBg, borderRadius: 14, padding: 10,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center', minWidth: 100,
   },
   modeBtnActive: { backgroundColor: Colors.primary + '15', borderColor: Colors.primary },
-  modeBtnText: { fontSize: 14, fontWeight: '700', color: Colors.text, marginBottom: 4 },
+  modeBtnText: { fontSize: 12, fontWeight: '700', color: Colors.text, marginBottom: 3, textAlign: 'center' },
   modeBtnTextActive: { color: Colors.primary },
-  modeBtnDesc: { fontSize: 10, color: Colors.textLight, textAlign: 'center' },
+  modeBtnDesc: { fontSize: 9, color: Colors.textLight, textAlign: 'center' },
 });

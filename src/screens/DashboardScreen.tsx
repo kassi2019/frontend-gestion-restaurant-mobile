@@ -20,7 +20,7 @@ import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import StatCard from '../components/StatCard';
 import ActionSheet from '../components/ActionSheet';
-import { commandesApi, notificationsApi, paiementApi } from '../services/api';
+import { commandesApi, notificationsApi, paiementApi, menuApi, tablesApi } from '../services/api';
 import { getSocket } from '../services/socket';
 import { showToast } from '../services/toast';
 
@@ -108,6 +108,23 @@ export default function DashboardScreen() {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showRemise, setShowRemise] = useState(false);
   const [remiseForm, setRemiseForm] = useState({ type: 'POURCENTAGE', valeur: '0', motif: '' });
+
+  // Mode 3 CAISSE : états (au niveau racine pour respecter les hooks)
+  const [showDirectCmd, setShowDirectCmd] = useState(false);
+  const [directCart, setDirectCart] = useState<{ menuId: number; nom: string; prix: number; quantite: number }[]>([]);
+  const [directTableId, setDirectTableId] = useState(0);
+  const [directPayMode, setDirectPayMode] = useState('ESPECES');
+  const [directMenus, setDirectMenus] = useState<any[]>([]);
+  const [directTables, setDirectTables] = useState<any[]>([]);
+  const [savingDirect, setSavingDirect] = useState(false);
+  const [searchDirectMenu, setSearchDirectMenu] = useState('');
+
+  // Coefficient zone pour la table sélectionnée en mode CAISSE
+  const directTableCoef = useMemo(() => {
+    if (!directTableId) return 1.0;
+    const t = directTables.find((tb: any) => tb.id === directTableId);
+    return t?.zoneTarif ? Number(t.zoneTarif.coefficient) : 1.0;
+  }, [directTableId, directTables]);
 
   const handlePrintReceipt = () => {
     if (receiptData?.factureId) {
@@ -437,6 +454,35 @@ export default function DashboardScreen() {
       }
       showToast.success(`${ok} commande(s) payée(s)`);
       loadCashierData();
+    };
+
+    // Mode 3 : commande directe
+    const openDirectCmd = async () => {
+      try {
+        const [mRes, tRes] = await Promise.all([menuApi.getMenus(), tablesApi.getAll()]);
+        setDirectMenus(mRes.data || []); setDirectTables(tRes.data || []);
+      } catch {}
+      setDirectCart([]); setDirectTableId(0); setDirectPayMode('ESPECES'); setShowDirectCmd(true);
+    };
+
+    const addToDirectCart = (m: any) => {
+      setDirectCart(prev => {
+        const found = prev.find(c => c.menuId === m.id);
+        if (found) return prev.map(c => c.menuId === m.id ? { ...c, quantite: c.quantite + 1 } : c);
+        return [...prev, { menuId: m.id, nom: m.nom, prix: parseFloat(m.prix), quantite: 1 }];
+      });
+    };
+
+    const handleDirectPay = async () => {
+      if (!directTableId) { showToast.error('Sélectionnez une table'); return; }
+      if (directCart.length === 0) { showToast.error('Ajoutez des articles'); return; }
+      setSavingDirect(true);
+      try {
+        const { data } = await commandesApi.createAndPay({ tableId: directTableId, details: directCart.map(c => ({ menuId: c.menuId, quantite: c.quantite })), modePaiement: directPayMode });
+        showToast.success('Payé !');
+        setShowDirectCmd(false); loadCashierData();
+      } catch { showToast.error('Erreur'); }
+      finally { setSavingDirect(false); }
     };
 
     const handlePayer = async (mode: string) => {
@@ -793,6 +839,15 @@ export default function DashboardScreen() {
           </View>
         </Modal>
 
+        {/* Mode 3 : Commande directe caisse (visible uniquement si mode = CAISSE) */}
+        {(user as any)?.modeGestion === 'CAISSE' && (
+          <TouchableOpacity style={[styles.clotureCard, { marginBottom: 8 }]} onPress={() => openDirectCmd()}>
+            <Text style={{ fontSize: 18 }}>🛒</Text>
+            <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: Colors.text }}>Nouvelle commande (caisse)</Text>
+            <Text style={{ color: Colors.primary, fontSize: 18 }}>›</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Acces Rapide */}
         <Text style={styles.sectionTitle}>Accès Rapide</Text>
         <View style={styles.menuGrid}>
@@ -887,6 +942,71 @@ export default function DashboardScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* MODE 3 : Commande directe */}
+        <Modal visible={showDirectCmd} transparent animationType="slide">
+          <View style={{ flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: Colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '90%' }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.text, marginBottom: 12 }}>🛒 Nouvelle commande</Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: Colors.text, marginBottom: 4 }}>Table</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                {directTables.map((t: any) => (
+                  <TouchableOpacity key={t.id} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 12, backgroundColor: directTableId === t.id ? Colors.primary : Colors.inputBg, borderWidth: 1, borderColor: directTableId === t.id ? Colors.primary : Colors.border }}
+                    onPress={() => setDirectTableId(t.id)}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: directTableId === t.id ? Colors.textWhite : Colors.text }}>{t.numero}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput style={{ height: 40, backgroundColor: Colors.inputBg, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, marginBottom: 10, fontSize: 14, color: Colors.text }}
+                placeholder="🔍 Rechercher un plat..." value={searchDirectMenu} onChangeText={setSearchDirectMenu} />
+              <View style={{ maxHeight: 200, marginBottom: 12 }}>
+                <FlatList data={directMenus.filter((m: any) => m.disponibilite !== false && m.disponibleDemain !== 1 && parseFloat(m.prix) > 0 && (!searchDirectMenu || m.nom.toLowerCase().includes(searchDirectMenu.toLowerCase())))} keyExtractor={(item: any) => item.id.toString()}
+                  renderItem={({ item: m }: any) => {
+                    const prixAdj = parseFloat(m.prix) * directTableCoef;
+                    return (
+                    <TouchableOpacity onPress={() => addToDirectCart({...m, prix: prixAdj})} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+                      <Text style={{ fontSize: 14, fontWeight: '500', color: Colors.text, flex: 1 }}>{m.nom}</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.primary, marginRight: 10 }}>{prixAdj.toFixed(2)} {devise}</Text>
+                      <Text style={{ fontSize: 18, color: Colors.primary, fontWeight: '800' }}>+</Text>
+                    </TouchableOpacity>
+                  )}} />
+              </View>
+              {/* Panier */}
+              <View style={{ backgroundColor: Colors.inputBg, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                <Text style={{ fontWeight: '700', marginBottom: 6 }}>🛒 Panier ({directCart.length})</Text>
+                {directCart.map((c, i) => (
+                  <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 13 }}>{c.quantite}x {c.nom}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ fontWeight: '600', fontSize: 13 }}>{(c.prix * c.quantite).toFixed(2)} {devise}</Text>
+                      <TouchableOpacity onPress={() => setDirectCart(prev => prev.filter((_, idx) => idx !== i))}>
+                        <Text style={{ color: Colors.danger, fontWeight: '800', fontSize: 16 }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+                <View style={{ borderTopWidth: 1, borderTopColor: Colors.border, marginTop: 6, paddingTop: 6, flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontWeight: '800' }}>TOTAL</Text>
+                  <Text style={{ fontWeight: '800', fontSize: 16, color: Colors.primary }}>{directCart.reduce((s, c) => s + c.prix * c.quantite, 0).toFixed(2)} {devise}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {['ESPECES', 'MOBILE_MONEY', 'CARTE_BANCAIRE'].map(m => (
+                  <TouchableOpacity key={m} style={{ flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: directPayMode === m ? Colors.primary : Colors.inputBg }}
+                    onPress={() => setDirectPayMode(m)}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: directPayMode === m ? Colors.textWhite : Colors.text }}>{m === 'ESPECES' ? '💵' : m === 'MOBILE_MONEY' ? '📱' : '💳'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity style={{ backgroundColor: Colors.success, borderRadius: 14, padding: 14, alignItems: 'center' }} onPress={handleDirectPay} disabled={savingDirect}>
+                <Text style={{ color: Colors.textWhite, fontWeight: '800', fontSize: 15 }}>{savingDirect ? 'Paiement...' : '💰 Payer et imprimer'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 6 }} onPress={() => setShowDirectCmd(false)}>
+                <Text style={{ color: Colors.textLight, fontSize: 14 }}>Annuler</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
