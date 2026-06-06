@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  Image,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { login, clearError } from '../store/slices/authSlice';
@@ -119,15 +120,17 @@ export default function LoginScreen() {
             { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          {/* Logo / Icon */}
+          {/* Logo */}
           <View style={styles.iconContainer}>
-            <View style={styles.iconCircle}>
-              <Text style={styles.iconText}>🍽</Text>
-            </View>
+            <Image
+              source={require('../../assets/log1.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
 
-          <Text style={styles.title}>RestoPro</Text>
-          <Text style={styles.subtitle}>Gestion Restaurant Intelligente</Text>
+          {/* <Text style={styles.title}>menuGo</Text>
+          <Text style={styles.subtitle}>Gestion Restaurant Intelligente</Text> */}
 
           {/* Error message */}
           {error && (
@@ -336,18 +339,12 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.primary + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconText: {
-    fontSize: 36,
+  logoImage: {
+    width: Math.min(width * 0.45, 180),
+    height: Math.min(width * 0.45, 180),
+    alignSelf: 'center',
   },
   title: {
     fontSize: 28,
@@ -357,11 +354,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textLight,
     textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 24,
+    marginTop: 2,
+    marginBottom: 16,
   },
   errorBox: {
     backgroundColor: '#FDE8E8',
