@@ -5,9 +5,9 @@
   "build": {
     "preview": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "artifactPath": "MenuGo.apk"
       }
     }
   }
 }
-

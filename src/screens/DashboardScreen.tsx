@@ -389,6 +389,7 @@ export default function DashboardScreen() {
     { icon: '📋', label: 'Réception', screen: 'Reception', color: '#7C3AED', roles: ['RECEPTIONNISTE'] },
     { icon: '🪑', label: 'Réservations', screen: 'Reservations', color: '#E67E22', roles: ['ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
     { icon: '🚚', label: 'Livraisons', screen: 'Livraisons', color: '#0284C7', roles: ['ADMIN', 'MANAGER', 'RECEPTIONNISTE'] },
+    { icon: '⭐', label: 'Avis clients', screen: 'Evaluations', color: '#FFB300', roles: ['ADMIN', 'MANAGER'] },
     { icon: '📦', label: 'Stock', screen: 'Stock', color: '#16A34A', roles: ['ADMIN', 'MANAGER'] },
     { icon: '🔔', label: 'Notifications', screen: 'Notifications', color: '#E67E22', badge: unreadNotifs, roles: ['ADMIN', 'MANAGER', 'SERVEUR', 'CUISINE', 'BAR', 'CAISSIER'] },
   ];

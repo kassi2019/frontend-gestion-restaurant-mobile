@@ -10,7 +10,7 @@ import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { commandesApi, tablesApi, menuApi, usersApi } from '../services/api';
 import { showToast } from '../services/toast';
 import { getSocket, connectSocket } from '../services/socket';
-import * as Print from 'expo-print';
+// import * as Print from 'expo-print'; // Désactivé temporairement pour debug APK
 import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 type TabType = 'arrivees' | 'validees' | 'payees';
@@ -227,7 +227,7 @@ export default function ReceptionnisteScreen() {
     switch (type) { case 'cuisine': titre = '🍳 CUISINE'; articles = getDetailsCuisine(cmd); break; case 'bar': titre = '🍸 BAR'; articles = getDetailsBar(cmd); break; case 'serveur': titre = '🧾 SERVEUR'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; case 'caisse': titre = '💰 CAISSE'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; }
     const pts = '<div style="border-top:2px dashed #aaa;margin:12px 0"></div>';
     const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + titre + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;padding:20px;max-width:300px;margin:0 auto;color:#222}h1{font-size:16px;text-align:center;margin-bottom:4px}h2{font-size:12px;text-align:center;color:#888;margin-bottom:10px;font-weight:400}h3{font-size:14px;text-align:center;margin-bottom:2px}.info{font-size:11px;text-align:center;color:#888;margin-bottom:2px}.footer{text-align:center;font-size:10px;color:#aaa;margin-top:16px}</style></head><body><h1>RestoPro</h1><h2>Gestion Restaurant</h2>' + pts + '<h3>' + titre + '</h3><p class="info">Table: ' + tableNumero + '</p><p class="info">' + cmdRef + ' · ' + dateStr + '</p>' + (type === 'serveur' || type === 'caisse' ? '<p class="info">Serveur: ' + serveurNom + '</p>' : '') + pts + articles.map((d: any) => avecPrix ? '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span>' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</span><span style="font-weight:600">' + (Number(d.prix || 0) * d.quantite).toFixed(2) + ' ' + devise + '</span></div>' : '<div style="font-size:13px;padding:3px 0">' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</div>').join('') + (articles.length === 0 ? '<p style="text-align:center;color:#aaa;font-style:italic;font-size:12px">Aucun article</p>' : '') + (avecTotal ? pts + '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:15px;font-weight:900"><span>TOTAL</span><span>' + total + ' ' + devise + '</span></div>' : '') + (type === 'caisse' ? '<p style="text-align:center;font-size:10px;font-weight:700;background:#FFF3E0;padding:4px 8px;border-radius:6px;margin-top:8px">Réf: ' + cmdRef + '</p>' : '') + pts + '<p class="footer">RestoPro © ' + new Date().getFullYear() + '<br>Merci de votre visite</p></body></html>';
-    try { await Print.printAsync({ html }); } catch {}
+    try { /* Print.printAsync({ html }) */ } catch {}
   };
 
   // Imprimer les 4 tickets d'un coup (mobile via expo-print)
@@ -262,7 +262,7 @@ export default function ReceptionnisteScreen() {
       (avecTotal ? ligne + '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;padding:2px 0"><span>TOTAL</span><span>' + total + ' ' + devise + '</span></div>' : '') +
       (ref ? '<p style="text-align:center;font-size:9px;font-weight:700;margin-top:4px">Réf: ' + refStr + '</p>' : '');
     const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Commande ' + refStr + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;padding:10px;max-width:280px;margin:0 auto;color:#000;font-size:11px}h1{text-align:center;font-size:15px;margin-bottom:2px}</style></head><body><h1>RestoPro</h1><p style="text-align:center;font-size:9px;color:#555;margin-bottom:4px">Gestion Restaurant</p><p style="text-align:center;font-size:9px;color:#555">Table: ' + tableNumero + ' · Serveur: ' + serveurNom + '</p>' + ligne + bloc('🍳 CUISINE', allCuisine, false, false) + coupe + bloc('🍸 BAR', allBar, false, false) + coupe + bloc('🧾 SERVEUR', allDetails, true, true) + coupe + bloc('💰 CAISSE', allDetails, true, true, true) + ligne + '<p style="text-align:center;font-size:9px;color:#aaa;margin-top:4px">RestoPro © ' + new Date().getFullYear() + '</p><p style="text-align:center;font-size:9px;color:#aaa">Merci de votre visite</p></body></html>';
-    try { await Print.printAsync({ html }); } catch {}
+    try { /* Print.printAsync({ html }) */ } catch {}
   };
 
   const renderCommande = ({ item }: { item: any }) => {

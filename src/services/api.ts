@@ -212,6 +212,11 @@ export const restaurantApi = {
     api.patch(`/restaurants/${id}`, data),
 };
 
+export const evaluationsApi = {
+  getAll: () => api.get('/evaluations'),
+  getMoyennes: () => api.get('/evaluations/moyennes'),
+};
+
 export const zonesApi = {
   getAll: () => api.get('/zones'),
   create: (data: { nom: string; coefficient: number }) => api.post('/zones', data),
