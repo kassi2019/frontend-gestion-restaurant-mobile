@@ -58,6 +58,21 @@ export const authApi = {
   // Abonnement
   getAbonnement: () => api.get('/auth/abonnement'),
   activerCode: (data: { telephone: string; code: string }) => api.post('/auth/activer', data),
+  // Nouveau système
+  getPlans: () => api.get('/auth/plans'),
+  getConfigPaiement: () => api.get('/auth/config-paiement'),
+  initierPaiement: (data: { planId: number; infosPaiement?: string }) => api.post('/auth/paiement-abonnement', data),
+  getMesPaiements: () => api.get('/auth/mes-paiements'),
+  // Super Admin - Gestion plans
+  getAllPlans: () => api.get('/auth/plans/all'),
+  createPlan: (data: { nom: string; dureeJours: number; prix: number }) => api.post('/auth/plans', data),
+  updatePlan: (id: number, data: { nom?: string; dureeJours?: number; prix?: number; actif?: boolean }) => api.patch(`/auth/plans/${id}`, data),
+  deletePlan: (id: number) => api.delete(`/auth/plans/${id}`),
+  // Super Admin - Paiements
+  getPaiementsEnAttente: () => api.get('/auth/paiements-en-attente'),
+  confirmerPaiement: (id: number) => api.patch(`/auth/paiements/${id}/confirmer`),
+  rejeterPaiement: (id: number) => api.patch(`/auth/paiements/${id}/rejeter`),
+  // Ancien système (Super Admin)
   genererCodes: (data: { dureeJours: number; nombre: number }) =>
     api.post('/auth/generer-codes', data),
   listeCodes: () => api.get('/auth/codes'),
@@ -181,6 +196,14 @@ export const paiementApi = {
   getHistoriqueClotures: (date?: string) =>
     api.get('/paiements/caisse/clotures', { params: date ? { date } : {} }),
   getStatutRestaurant: (id: number) => api.get(`/paiements/caisse/statut-restaurant/${id}`),
+};
+
+export const printerApi = {
+  getConfig: () => api.get('/printer/config'),
+  updateConfig: (data: any) => api.post('/printer/config', data),
+  testPrint: () => api.post('/printer/test'),
+  printFacture: (id: number) => api.post(`/printer/facture/${id}`),
+  printTicket: (contenu: string, titre?: string) => api.post('/printer/ticket', { contenu, titre }),
 };
 
 export const statistiquesApi = {

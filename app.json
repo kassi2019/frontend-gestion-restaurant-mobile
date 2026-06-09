@@ -11,7 +11,7 @@
         }
       ]
     ],
-    "slug": "menu-go",
+    "slug": "gestion-resto-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/log1.png",
@@ -30,9 +30,7 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.oresto.app",
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
+      "permissions": ["android.permission.RECORD_AUDIO"]
     },
     "web": {
       "favicon": "./assets/log1.png"

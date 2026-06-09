@@ -53,6 +53,14 @@ export default function RestaurantSettingsScreen() {
   const [aboStatus, setAboStatus] = useState<any>(null);
   const [aboCode, setAboCode] = useState('');
   const [aboActivationLoading, setAboActivationLoading] = useState(false);
+  // Nouveau système
+  const [plans, setPlans] = useState<any[]>([]);
+  const [configPaiement, setConfigPaiement] = useState<any>(null);
+  const [paiements, setPaiements] = useState<any[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [paiementInfos, setPaiementInfos] = useState('');
+  const [paiementLoading, setPaiementLoading] = useState(false);
 
   // Zones
   const [zones, setZones] = useState<any[]>([]);
@@ -91,8 +99,30 @@ export default function RestaurantSettingsScreen() {
         .then(({ data }) => setAboStatus(data))
         .catch(() => showToast.error('Impossible de charger le statut d\'abonnement'))
         .finally(() => setAboLoading(false));
+      // Nouveau système
+      authApi.getPlans().then(({ data }) => setPlans(data || [])).catch(() => {});
+      authApi.getConfigPaiement().then(({ data }) => setConfigPaiement(data)).catch(() => {});
+      authApi.getMesPaiements().then(({ data }) => setPaiements(data || [])).catch(() => {});
     }
   }, [activeMenu]);
+
+  const initierPaiement = async () => {
+    if (!selectedPlan) return;
+    setPaiementLoading(true);
+    try {
+      const { data } = await authApi.initierPaiement({ planId: selectedPlan.id, infosPaiement: paiementInfos });
+      setShowPlanModal(false);
+      setSelectedPlan(null);
+      setPaiementInfos('');
+      showToast.success('Paiement déclaré ! Réf: ' + data.reference);
+      // Recharger
+      authApi.getMesPaiements().then(({ data: d }) => setPaiements(d || [])).catch(() => {});
+    } catch (err: any) {
+      showToast.error(err.response?.data?.message || 'Erreur');
+    } finally {
+      setPaiementLoading(false);
+    }
+  };
 
   const handleActiverAbonnement = async () => {
     if (!aboCode.trim()) {
@@ -331,7 +361,8 @@ export default function RestaurantSettingsScreen() {
                   <Text style={styles.aboValue}>
                     {aboStatus.typeAbonnement === 'TRIAL' ? '🆓 Période d\'essai' :
                      aboStatus.typeAbonnement === 'MENSUEL' ? '📅 Mensuel' :
-                     aboStatus.typeAbonnement === 'ANNUEL' ? '📆 Annuel' : aboStatus.typeAbonnement}
+                     aboStatus.typeAbonnement === 'TRIMESTRIEL' ? '⭐ Trimestriel' :
+                     aboStatus.typeAbonnement === 'ANNUEL' ? '👑 Annuel' : aboStatus.typeAbonnement}
                   </Text>
                 </View>
 
@@ -351,9 +382,63 @@ export default function RestaurantSettingsScreen() {
                   </Text>
                 </View>
 
-                {/* Saisie code */}
+                {/* --- NOUVEAU : Acheter un abonnement --- */}
+                {plans.length > 0 && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={styles.aboActivationTitle}>💎 Acheter un abonnement</Text>
+                    <Text style={{ fontSize: 12, color: Colors.textLight, marginBottom: 10 }}>
+                      Choisissez un plan, payez via Mobile Money, puis confirmez.
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {plans.map((p: any) => (
+                        <TouchableOpacity
+                          key={p.id}
+                          style={{
+                            flex: 1, minWidth: 100, padding: 12, borderRadius: 12, borderWidth: 2,
+                            borderColor: selectedPlan?.id === p.id ? Colors.primary : Colors.border,
+                            backgroundColor: selectedPlan?.id === p.id ? Colors.primary + '08' : Colors.surface,
+                            alignItems: 'center',
+                          }}
+                          onPress={() => { setSelectedPlan(p); setShowPlanModal(true); }}
+                        >
+                          <Text style={{ fontWeight: '800', color: Colors.text, fontSize: 13 }}>{p.nom}</Text>
+                          <Text style={{ fontSize: 11, color: Colors.textLight }}>{p.dureeJours} jours</Text>
+                          <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.primary, marginTop: 4 }}>
+                            {Number(p.prix).toLocaleString('fr-FR')} F
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Historique paiements */}
+                {paiements.length > 0 && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={styles.aboActivationTitle}>📋 Mes paiements</Text>
+                    {paiements.map((p: any) => (
+                      <View key={p.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600' }}>{p.plan?.nom} — {p.dureeJours}j</Text>
+                          <Text style={{ fontSize: 11, color: Colors.textLight }}>{p.reference}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={{ fontWeight: '700', color: Colors.primary }}>{Number(p.montant).toLocaleString('fr-FR')} F</Text>
+                          <Text style={{ fontSize: 10, color: p.statut === 'CONFIRME' ? Colors.success : p.statut === 'REJETE' ? Colors.danger : '#F59E0B' }}>
+                            {p.statut === 'EN_ATTENTE' ? '⏳ En attente' : p.statut === 'CONFIRME' ? '✅ Confirmé' : '❌ Rejeté'}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Activation par code (ancien système) */}
                 <View style={styles.aboActivation}>
                   <Text style={styles.aboActivationTitle}>🔑 Activer un code</Text>
+                  <Text style={{ fontSize: 11, color: Colors.textLight, marginBottom: 8 }}>
+                    Si vous avez reçu un code du Super Admin.
+                  </Text>
                   <TextInput
                     style={styles.input}
                     value={aboCode}
@@ -457,6 +542,48 @@ export default function RestaurantSettingsScreen() {
               <Text style={{ color: Colors.textWhite, fontWeight: '800', fontSize: 15 }}>Enregistrer</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 6 }} onPress={() => setShowZoneForm(false)}>
+              <Text style={{ color: Colors.textLight, fontSize: 14 }}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal Paiement abonnement */}
+      <Modal visible={showPlanModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+          <View style={{ backgroundColor: Colors.surface, borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: Colors.text, textAlign: 'center', marginBottom: 6 }}>💳 Paiement</Text>
+            {selectedPlan ? (
+              <Text style={{ textAlign: 'center', color: Colors.textLight, marginBottom: 12 }}>
+                {`${selectedPlan.nom} — ${selectedPlan.dureeJours} jours — ${Number(selectedPlan.prix).toLocaleString('fr-FR')} F`}
+              </Text>
+            ) : null}
+            {configPaiement ? (
+              <View style={{ backgroundColor: Colors.inputBg, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                {configPaiement.waveNumero ? <Text style={{ fontSize: 13 }}>{`📱 Wave : ${configPaiement.waveNumero}`}</Text> : null}
+                {configPaiement.omNumero ? <Text style={{ fontSize: 13 }}>{`📱 OM : ${configPaiement.omNumero}`}</Text> : null}
+                <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 4 }}>{configPaiement?.instructions || ''}</Text>
+              </View>
+            ) : null}
+            <TextInput
+              style={[styles.input, { height: 60, marginBottom: 12 }]}
+              placeholder="Infos transaction (optionnel)"
+              placeholderTextColor={Colors.textLight}
+              value={paiementInfos}
+              onChangeText={setPaiementInfos}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.saveBtn, { marginTop: 0 }, paiementLoading && { opacity: 0.6 }]}
+              onPress={initierPaiement}
+              disabled={paiementLoading}
+            >
+              <Text style={styles.saveBtnText}>✅ J'ai payé, confirmer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => { setShowPlanModal(false); setPaiementInfos(''); }}
+              style={{ alignItems: 'center', marginTop: 14, paddingVertical: 8 }}
+            >
               <Text style={{ color: Colors.textLight, fontSize: 14 }}>Annuler</Text>
             </TouchableOpacity>
           </View>

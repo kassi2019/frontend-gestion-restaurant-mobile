@@ -28,6 +28,14 @@ export default function GenerateCodesScreen() {
   const [loadingCodes, setLoadingCodes] = useState(false);
   const [visibleIds, setVisibleIds] = useState<Set<number>>(new Set());
   const [tab, setTab] = useState<'dispo' | 'utilises'>('dispo');
+  // Gestion plans
+  const [plans, setPlans] = useState<any[]>([]);
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<any>(null);
+  const [planForm, setPlanForm] = useState({ nom: '', dureeJours: '30', prix: '5000' });
+  const [savingPlan, setSavingPlan] = useState(false);
+  // Paiements en attente
+  const [paiementsAttente, setPaiementsAttente] = useState<any[]>([]);
 
   const toggleCode = (id: number) => {
     setVisibleIds((prev) => {
@@ -102,6 +110,62 @@ export default function GenerateCodesScreen() {
     } finally {
       setGenerating(false);
     }
+  };
+
+  // ========== Gestion des plans ==========
+  const loadPlans = async () => {
+    try { const { data } = await authApi.getAllPlans(); setPlans(data || []); } catch {}
+  };
+  React.useEffect(() => { if (isSuperAdmin) { loadPlans(); loadPaiements(); } }, []);
+
+  const loadPaiements = async () => {
+    try { const { data } = await authApi.getPaiementsEnAttente(); setPaiementsAttente(data || []); } catch {}
+  };
+
+  const handleConfirmer = async (p: any) => {
+    Alert.alert('Confirmer le paiement ?', `${p.restaurant?.nom} — ${Number(p.montant).toLocaleString('fr-FR')} F — ${p.dureeJours}j`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Confirmer', onPress: async () => {
+        try { const { data } = await authApi.confirmerPaiement(p.id); showToast.success(data.message || 'Activé'); loadPaiements(); } catch {}
+      }},
+    ]);
+  };
+
+  const handleRejeter = async (p: any) => {
+    Alert.alert('Rejeter le paiement ?', p.restaurant?.nom, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Rejeter', style: 'destructive', onPress: async () => {
+        try { await authApi.rejeterPaiement(p.id); showToast.success('Rejeté'); loadPaiements(); } catch {}
+      }},
+    ]);
+  };
+
+  const openNewPlan = () => { setEditingPlan(null); setPlanForm({ nom: '', dureeJours: '30', prix: '5000' }); setShowPlanForm(true); };
+  const openEditPlan = (p: any) => { setEditingPlan(p); setPlanForm({ nom: p.nom, dureeJours: String(p.dureeJours), prix: String(p.prix) }); setShowPlanForm(true); };
+
+  const handleSavePlan = async () => {
+    if (!planForm.nom || !planForm.dureeJours || !planForm.prix) { showToast.error('Tous les champs sont requis'); return; }
+    setSavingPlan(true);
+    try {
+      if (editingPlan) {
+        await authApi.updatePlan(editingPlan.id, { nom: planForm.nom, dureeJours: parseInt(planForm.dureeJours), prix: parseFloat(planForm.prix) });
+        showToast.success('Plan mis à jour');
+      } else {
+        await authApi.createPlan({ nom: planForm.nom, dureeJours: parseInt(planForm.dureeJours), prix: parseFloat(planForm.prix) });
+        showToast.success('Plan créé');
+      }
+      setShowPlanForm(false); loadPlans();
+    } catch (err: any) { showToast.error(err.response?.data?.message || 'Erreur'); }
+    finally { setSavingPlan(false); }
+  };
+
+  const handleDeletePlan = (p: any) => {
+    Alert.alert('Désactiver le plan', `Désactiver "${p.nom}" ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Désactiver', style: 'destructive', onPress: async () => {
+        try { await authApi.deletePlan(p.id); showToast.success('Plan désactivé'); loadPlans(); } catch {}
+      }},
+    ]);
   };
 
   const formatDate = (d: string) => {
@@ -200,6 +264,86 @@ export default function GenerateCodesScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Gestion des plans d'abonnement */}
+      <View style={styles.card}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.title}>💎 Plans d'abonnement</Text>
+          <TouchableOpacity style={styles.generateBtnSmall} onPress={openNewPlan}>
+            <Text style={styles.generateBtnTextSmall}>+ Plan</Text>
+          </TouchableOpacity>
+        </View>
+        {plans.map((p: any) => (
+          <View key={p.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: '700', color: Colors.text }}>{p.nom}{!p.actif ? ' (Inactif)' : ''}</Text>
+              <Text style={{ fontSize: 12, color: Colors.textLight }}>{p.dureeJours} jours · {Number(p.prix).toLocaleString('fr-FR')} F</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity onPress={() => openEditPlan(p)} style={{ padding: 8, backgroundColor: Colors.inputBg, borderRadius: 8 }}>
+                <Text>✏️</Text>
+              </TouchableOpacity>
+              {p.actif && (
+                <TouchableOpacity onPress={() => handleDeletePlan(p)} style={{ padding: 8, backgroundColor: Colors.danger + '15', borderRadius: 8 }}>
+                  <Text>🗑</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        ))}
+        {plans.length === 0 && <Text style={styles.empty}>Aucun plan</Text>}
+      </View>
+
+      {/* Modal formulaire plan */}
+      {showPlanForm && (
+        <View style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 100, paddingHorizontal: 24 }}>
+          <View style={{ backgroundColor: Colors.surface, borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>
+              {editingPlan ? 'Modifier le plan' : 'Nouveau plan'}
+            </Text>
+            <Text style={styles.label}>Nom</Text>
+            <TextInput style={styles.inputFull} value={planForm.nom} onChangeText={t => setPlanForm({ ...planForm, nom: t })} placeholder="Ex: Mensuel" placeholderTextColor={Colors.textLight} />
+            <Text style={styles.label}>Durée (jours)</Text>
+            <TextInput style={styles.inputFull} value={planForm.dureeJours} onChangeText={t => setPlanForm({ ...planForm, dureeJours: t })} keyboardType="numeric" placeholderTextColor={Colors.textLight} />
+            <Text style={styles.label}>Prix (FCFA)</Text>
+            <TextInput style={styles.inputFull} value={planForm.prix} onChangeText={t => setPlanForm({ ...planForm, prix: t })} keyboardType="numeric" placeholderTextColor={Colors.textLight} />
+            <TouchableOpacity style={[styles.generateBtn, savingPlan && { opacity: 0.6 }]} onPress={handleSavePlan} disabled={savingPlan}>
+              <Text style={styles.generateBtnText}>Enregistrer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowPlanForm(false)} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 8 }}>
+              <Text style={{ color: Colors.textLight }}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Paiements en attente */}
+      {paiementsAttente.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.title}>💳 Paiements en attente ({paiementsAttente.length})</Text>
+          {paiementsAttente.map((p: any) => (
+            <View key={p.id} style={{ backgroundColor: '#FFF7ED', borderRadius: 12, padding: 12, marginTop: 8, borderWidth: 1, borderColor: '#FED7AA' }}>
+              <Text style={{ fontWeight: '700', color: Colors.text }}>{p.restaurant?.nom || '—'}</Text>
+              <Text style={{ fontSize: 12, color: Colors.textLight }}>
+                {p.plan?.nom} · {p.dureeJours}j · Réf: {p.reference}
+              </Text>
+              {p.infosPaiement ? <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 2 }}>💬 {p.infosPaiement}</Text> : null}
+              <Text style={{ fontSize: 11, color: Colors.textLight }}>{new Date(p.dateCreation).toLocaleString('fr-FR')}</Text>
+              <Text style={{ fontWeight: '800', color: Colors.primary, fontSize: 16, marginTop: 4 }}>
+                {Number(p.montant).toLocaleString('fr-FR')} F
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <TouchableOpacity style={styles.rejectBtn} onPress={() => handleRejeter(p)}>
+                  <Text style={styles.rejectBtnText}>❌ Rejeter</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmBtn} onPress={() => handleConfirmer(p)}>
+                  <Text style={styles.confirmBtnText}>✅ Confirmer</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Liste des codes avec tabs */}
       <View style={styles.card}>
@@ -330,6 +474,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   generateBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
+  generateBtnSmall: {
+    backgroundColor: Colors.primary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8,
+  },
+  generateBtnTextSmall: { color: Colors.textWhite, fontWeight: '700', fontSize: 13 },
   codeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,4 +516,8 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', color: Colors.textLight, marginVertical: 20 },
   lockIcon: { fontSize: 48, textAlign: 'center', marginBottom: 12 },
   lockText: { fontSize: 14, color: Colors.warning, fontWeight: '600', textAlign: 'center' },
+  rejectBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.danger + '15', alignItems: 'center' },
+  rejectBtnText: { color: Colors.danger, fontWeight: '700', fontSize: 13 },
+  confirmBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.success, alignItems: 'center' },
+  confirmBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 13 },
 });

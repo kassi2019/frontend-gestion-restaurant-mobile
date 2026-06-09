@@ -48,6 +48,10 @@ export function connectSocket() {
     playNotificationSound(); showToast.success(`📢 ${data.message || 'Commande prête — Table ' + (data.tableNumero || '?')}`);
   });
 
+  socket.on('nouvelle_commande_caisse', (data: any) => {
+    playNotificationSound(); showToast.warning(`💰 Nouvelle commande caisse • Table ${data.table?.numero || '?'} — ${Number(data.montantTotal || 0).toFixed(2)} €`);
+  });
+
   socket.on('demande_facture', (data: any) => {
     playNotificationSound(); showToast.warning(`🧾 Demande d'addition — Table ${data.tableNumero || '?'}`);
   });

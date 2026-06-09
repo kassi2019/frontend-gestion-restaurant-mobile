@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert, Linking, Modal, ScrollView,
+  RefreshControl, ActivityIndicator, Alert, Modal, ScrollView,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
-import { paiementApi } from '../services/api';
+import { paiementApi, printerApi } from '../services/api';
 import { showToast } from '../services/toast';
+import { getSocket } from '../services/socket';
 import ActionSheet from '../components/ActionSheet';
 
 const MODE_LABELS: Record<string, string> = {
@@ -27,7 +28,7 @@ export default function CashierScreen() {
   const [receiptData, setReceiptData] = useState<any>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [cmdRes, caisseRes] = await Promise.all([
         paiementApi.getAPayer(),
@@ -38,9 +39,26 @@ export default function CashierScreen() {
     } catch (err) {
       showToast.error('Erreur de chargement');
     } finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Écoute temps réel : nouvelles commandes venant du scan QR (mode CAISSE)
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleNouvelleCommandeCaisse = () => {
+      // Recharger la liste des commandes à payer en temps réel
+      loadData();
+    };
+
+    socket.on('nouvelle_commande_caisse', handleNouvelleCommandeCaisse);
+
+    return () => {
+      socket.off('nouvelle_commande_caisse', handleNouvelleCommandeCaisse);
+    };
+  }, [loadData]);
 
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 
@@ -68,9 +86,14 @@ export default function CashierScreen() {
     }
   };
 
-  const handlePrintReceipt = () => {
-    if (receiptData?.id) {
-      Linking.openURL(paiementApi.imprimerFacture(receiptData.id));
+  const handlePrintReceipt = async () => {
+    if (!receiptData?.id) return;
+    try {
+      const { data } = await printerApi.printFacture(receiptData.id);
+      if (data.ok) showToast.success('Recu envoye a l\'imprimante');
+      else showToast.error(data.message || 'Echec impression');
+    } catch (err: any) {
+      showToast.error(err.response?.data?.message || 'Erreur impression');
     }
   };
 
@@ -261,7 +284,7 @@ export default function CashierScreen() {
 
                 {/* Btn imprimer */}
                 <TouchableOpacity style={styles.printBtn} onPress={handlePrintReceipt}>
-                  <Text style={styles.printBtnText}>🖨 Imprimer le recu</Text>
+                  <Text style={styles.printBtnText}>🖨 Imprimer le reçu</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.closeReceiptBtn}
@@ -363,6 +386,7 @@ const styles = StyleSheet.create({
   receiptTotalLabel: { fontSize: 16, fontWeight: '800', color: Colors.text },
   receiptTotalValue: { fontSize: 18, fontWeight: '800', color: Colors.success },
   printBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
+  printPhysiqueBtn: { backgroundColor: '#16a34a', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   printBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
   closeReceiptBtn: { backgroundColor: Colors.inputBg, borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 8 },
   closeReceiptText: { color: Colors.textLight, fontWeight: '600', fontSize: 14 },

@@ -7,7 +7,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { Colors } from '../theme/colors';
 import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
-import { commandesApi, tablesApi, menuApi, usersApi } from '../services/api';
+import { commandesApi, tablesApi, menuApi, usersApi, printerApi } from '../services/api';
 import { showToast } from '../services/toast';
 import { getSocket, connectSocket } from '../services/socket';
 // import * as Print from 'expo-print'; // Désactivé temporairement pour debug APK
@@ -216,7 +216,7 @@ export default function ReceptionnisteScreen() {
     }
   };
 
-  // Imprimer un ticket individuel (mobile via expo-print)
+  // Imprimer un ticket sur l'imprimante physique
   const imprimerTicket = async (cmd: any, type: 'cuisine' | 'bar' | 'serveur' | 'caisse') => {
     const tableNumero = getTableNumero(cmd.tableId);
     const serveurNom = getServeurNom(cmd.serveurId) || '—';
@@ -224,25 +224,46 @@ export default function ReceptionnisteScreen() {
     const cmdRef = 'CMD-' + String(cmd.id).padStart(4, '0');
     const total = Number(cmd.montantTotal || 0).toFixed(2);
     let articles: any[] = [], titre = '', avecPrix = false, avecTotal = false;
-    switch (type) { case 'cuisine': titre = '🍳 CUISINE'; articles = getDetailsCuisine(cmd); break; case 'bar': titre = '🍸 BAR'; articles = getDetailsBar(cmd); break; case 'serveur': titre = '🧾 SERVEUR'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; case 'caisse': titre = '💰 CAISSE'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; }
-    const pts = '<div style="border-top:2px dashed #aaa;margin:12px 0"></div>';
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + titre + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;padding:20px;max-width:300px;margin:0 auto;color:#222}h1{font-size:16px;text-align:center;margin-bottom:4px}h2{font-size:12px;text-align:center;color:#888;margin-bottom:10px;font-weight:400}h3{font-size:14px;text-align:center;margin-bottom:2px}.info{font-size:11px;text-align:center;color:#888;margin-bottom:2px}.footer{text-align:center;font-size:10px;color:#aaa;margin-top:16px}</style></head><body><h1>RestoPro</h1><h2>Gestion Restaurant</h2>' + pts + '<h3>' + titre + '</h3><p class="info">Table: ' + tableNumero + '</p><p class="info">' + cmdRef + ' · ' + dateStr + '</p>' + (type === 'serveur' || type === 'caisse' ? '<p class="info">Serveur: ' + serveurNom + '</p>' : '') + pts + articles.map((d: any) => avecPrix ? '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px"><span>' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</span><span style="font-weight:600">' + (Number(d.prix || 0) * d.quantite).toFixed(2) + ' ' + devise + '</span></div>' : '<div style="font-size:13px;padding:3px 0">' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</div>').join('') + (articles.length === 0 ? '<p style="text-align:center;color:#aaa;font-style:italic;font-size:12px">Aucun article</p>' : '') + (avecTotal ? pts + '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:15px;font-weight:900"><span>TOTAL</span><span>' + total + ' ' + devise + '</span></div>' : '') + (type === 'caisse' ? '<p style="text-align:center;font-size:10px;font-weight:700;background:#FFF3E0;padding:4px 8px;border-radius:6px;margin-top:8px">Réf: ' + cmdRef + '</p>' : '') + pts + '<p class="footer">RestoPro © ' + new Date().getFullYear() + '<br>Merci de votre visite</p></body></html>';
-    try { /* Print.printAsync({ html }) */ } catch {}
+    switch (type) { case 'cuisine': titre = 'CUISINE'; articles = getDetailsCuisine(cmd); break; case 'bar': titre = 'BAR'; articles = getDetailsBar(cmd); break; case 'serveur': titre = 'SERVEUR'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; case 'caisse': titre = 'CAISSE'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; }
+
+    const width = 42;
+    const dash = '-'.repeat(width);
+    const center = (t: string) => ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
+    const lines: string[] = [];
+    lines.push(center(titre));
+    lines.push(dash);
+    lines.push(`Table: ${tableNumero}  ${cmdRef}`);
+    lines.push(dateStr);
+    if (type === 'serveur' || type === 'caisse') lines.push(`Serveur: ${serveurNom}`);
+    lines.push(dash);
+    articles.forEach((d: any) => {
+      const qte = `x${d.quantite}`;
+      const nom = (d.menu?.nom || 'Plat').substring(0, 25);
+      if (avecPrix) {
+        const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`;
+        lines.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`);
+      } else {
+        lines.push(`${qte} ${nom}`);
+      }
+    });
+    if (avecTotal) { lines.push(dash); lines.push('TOTAL' + ' '.repeat(Math.max(1, width - 5 - total.length - devise.length - 1)) + `${total} ${devise}`); }
+    if (type === 'caisse') lines.push(`Ref: ${cmdRef}`);
+    lines.push(dash);
+
+    try {
+      const { data } = await printerApi.printTicket(lines.join('\n'), titre);
+      if (data.ok) showToast.success('Ticket imprimé');
+      else showToast.error(data.message || 'Échec');
+    } catch { showToast.error('Erreur impression'); }
   };
 
-  // Imprimer les 4 tickets d'un coup (mobile via expo-print)
+  // Imprimer les tickets groupés sur l'imprimante physique
   const imprimerTout = async (item: any) => {
-    // Si item groupé (a un tableau commandes), fusionner toutes les commandes
     const commandes = item.commandes || [item];
     const tableNumero = item.tableNumero || getTableNumero(item.tableId);
     const serveurNom = getServeurNom(item.serveurId) || '—';
     const total = Number(commandes.reduce((s: number, c: any) => s + Number(c.montantTotal || 0), 0)).toFixed(2);
-
-    // Fusionner tous les détails de toutes les commandes
-    const allDetails: any[] = [];
-    const allCuisine: any[] = [];
-    const allBar: any[] = [];
-    const refs: string[] = [];
+    const allDetails: any[] = [], allCuisine: any[] = [], allBar: any[] = [], refs: string[] = [];
     commandes.forEach((cmd: any) => {
       refs.push('CMD-' + String(cmd.id).padStart(4, '0'));
       allDetails.push(...(cmd.details || []));
@@ -250,19 +271,33 @@ export default function ReceptionnisteScreen() {
       allBar.push(...getDetailsBar(cmd));
     });
     const refStr = refs.join(' · ');
+    const width = 42; const dash = '-'.repeat(width);
+    const center = (t: string) => ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
+    const bloc = (t: string, items: any[], avecPrix: boolean, avecTotal: boolean, ref?: boolean) => {
+      const bl: string[] = [];
+      bl.push(center(t)); bl.push('  ' + refStr); bl.push(dash);
+      items.forEach((d: any) => {
+        const qte = `x${d.quantite}`; const nom = (d.menu?.nom || 'Plat').substring(0, 25);
+        if (avecPrix) { const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`; bl.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`); }
+        else bl.push(`${qte} ${nom}`);
+      });
+      if (avecTotal) { bl.push(dash); bl.push('TOTAL' + ' '.repeat(Math.max(1, width - 5 - total.length - devise.length - 1)) + `${total} ${devise}`); }
+      if (ref) bl.push('Ref: ' + refStr);
+      return bl.join('\n');
+    };
+    const contenu = [
+      center('RestoPro'), center(`Table: ${tableNumero} · Serveur: ${serveurNom}`), dash,
+      bloc('CUISINE', allCuisine, false, false), '--- ✂ ---',
+      bloc('BAR', allBar, false, false), '--- ✂ ---',
+      bloc('SERVEUR', allDetails, true, true), '--- ✂ ---',
+      bloc('CAISSE', allDetails, true, true, true), dash,
+    ].join('\n');
 
-    const ligne = '<div style="border-top:1px dashed #000;margin:6px 0"></div>';
-    const coupe = '<div style="text-align:center;padding:8px 0;font-size:10px;letter-spacing:8px">- - - - ✂ - - - -</div>';
-    const bloc = (t: string, items: any[], avecPrix: boolean, avecTotal: boolean, ref?: boolean) =>
-      '<h3 style="text-align:center;font-size:13px;margin:4px 0">' + t + '</h3><p style="text-align:center;font-size:9px;color:#555">' + refStr + '</p>' + ligne +
-      (items.map((d: any) => avecPrix
-        ? '<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0"><span>' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</span><span>' + (Number(d.prix || 0) * d.quantite).toFixed(2) + ' ' + devise + '</span></div>'
-        : '<div style="font-size:11px;padding:1px 0">' + d.quantite + 'x ' + ((d.menu?.nom) || 'Plat') + '</div>'
-      ).join('') || '<p style="text-align:center;color:#999;font-size:10px;font-style:italic">Aucun article</p>') +
-      (avecTotal ? ligne + '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;padding:2px 0"><span>TOTAL</span><span>' + total + ' ' + devise + '</span></div>' : '') +
-      (ref ? '<p style="text-align:center;font-size:9px;font-weight:700;margin-top:4px">Réf: ' + refStr + '</p>' : '');
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Commande ' + refStr + '</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Courier New",monospace;padding:10px;max-width:280px;margin:0 auto;color:#000;font-size:11px}h1{text-align:center;font-size:15px;margin-bottom:2px}</style></head><body><h1>RestoPro</h1><p style="text-align:center;font-size:9px;color:#555;margin-bottom:4px">Gestion Restaurant</p><p style="text-align:center;font-size:9px;color:#555">Table: ' + tableNumero + ' · Serveur: ' + serveurNom + '</p>' + ligne + bloc('🍳 CUISINE', allCuisine, false, false) + coupe + bloc('🍸 BAR', allBar, false, false) + coupe + bloc('🧾 SERVEUR', allDetails, true, true) + coupe + bloc('💰 CAISSE', allDetails, true, true, true) + ligne + '<p style="text-align:center;font-size:9px;color:#aaa;margin-top:4px">RestoPro © ' + new Date().getFullYear() + '</p><p style="text-align:center;font-size:9px;color:#aaa">Merci de votre visite</p></body></html>';
-    try { /* Print.printAsync({ html }) */ } catch {}
+    try {
+      const { data } = await printerApi.printTicket(contenu, 'Commande ' + refStr);
+      if (data.ok) showToast.success('Tickets imprimés');
+      else showToast.error(data.message || 'Échec');
+    } catch { showToast.error('Erreur impression'); }
   };
 
   const renderCommande = ({ item }: { item: any }) => {
