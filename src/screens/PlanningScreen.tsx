@@ -682,8 +682,10 @@ const styles = StyleSheet.create({
   },
   dropdownItem: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10 },
   dropdownItemActive: { backgroundColor: Colors.primary + '15' },
+  dropdownItemSelected: { backgroundColor: Colors.primary + '15' },
   dropdownItemText: { fontSize: 14, color: Colors.text, fontWeight: '500' },
   dropdownItemTextActive: { color: Colors.primary, fontWeight: '700' },
+  dropdownItemTextSelected: { color: Colors.primary, fontWeight: '700' },
   filterSectionTitle: { fontSize: 12, fontWeight: '600', color: Colors.textLight, marginBottom: 6 },
   filterChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   roleChip: {

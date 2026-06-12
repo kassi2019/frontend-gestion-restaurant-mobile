@@ -10,8 +10,6 @@ import { formatPrixDevise, selectDevise } from '../store/slices/authSlice';
 import { commandesApi, tablesApi, menuApi, usersApi, printerApi } from '../services/api';
 import { showToast } from '../services/toast';
 import { getSocket, connectSocket } from '../services/socket';
-// import * as Print from 'expo-print'; // Désactivé temporairement pour debug APK
-import CalendarPicker, { toDateStr, formatDisplay } from '../components/CalendarPicker';
 
 type TabType = 'arrivees' | 'validees' | 'payees';
 
@@ -33,8 +31,6 @@ export default function ReceptionnisteScreen() {
 
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDate, setFilterDate] = useState(aujourdhui);
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Modal ticket
   const [showTickets, setShowTickets] = useState(false);
@@ -93,7 +89,7 @@ export default function ReceptionnisteScreen() {
     };
   }, [loadData]);
 
-  // Filtrer par recherche et date
+  // Filtrer par recherche et date (toujours aujourd'hui)
   const filteredCommandes = commandes.filter((c: any) => {
     if (!c) return false;
     // Filtre par numéro de commande
@@ -103,12 +99,10 @@ export default function ReceptionnisteScreen() {
       const matchNum = numCmd.includes(term) || String(c.id).includes(term);
       if (!matchNum) return false;
     }
-    // Filtre par date
-    if (filterDate) {
-      const d = new Date(c.dateCommande);
-      const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      if (dStr !== filterDate) return false;
-    }
+    // Toujours filtrer par aujourd'hui
+    const d = new Date(c.dateCommande);
+    const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (dStr !== aujourdhui) return false;
     return true;
   });
 
@@ -168,13 +162,27 @@ export default function ReceptionnisteScreen() {
     }
   };
 
-  // Valider → RECEPTION_VALIDE → tickets
+  // Valider → RECEPTION_VALIDE → impression auto par destination
   const handleValider = async (cmd: any) => {
     try {
       await commandesApi.updateStatut(cmd.id, 'RECEPTION_VALIDE');
       showToast.success('Commande validée !');
+      // Impression automatique par destination (CUISINE, BAR, SERVEUR, CAISSE)
+      try {
+        const { data } = await printerApi.printCommandeTickets(cmd.id);
+        if (data.ok) {
+          showToast.success(`🧾 ${data.message || 'Tickets imprimés'}`);
+        } else if (data.details) {
+          const ko = data.details.filter((d: any) => !d.ok);
+          if (ko.length > 0) {
+            showToast.error(`${ko.length} ticket(s) échoué(s)`);
+          }
+        }
+      } catch {
+        showToast.error('Erreur impression automatique');
+      }
       setTicketCmd({ ...cmd, statut: 'RECEPTION_VALIDE' });
-      setShowTickets(true);
+      setShowTickets(true); // On garde le modal pour réimprimer si besoin
       loadData();
     } catch (err: any) {
       showToast.error(err.response?.data?.message || 'Erreur validation');
@@ -217,14 +225,14 @@ export default function ReceptionnisteScreen() {
   };
 
   // Imprimer un ticket sur l'imprimante physique
-  const imprimerTicket = async (cmd: any, type: 'cuisine' | 'bar' | 'serveur' | 'caisse') => {
+  const imprimerTicket = async (cmd: any, type: 'cuisine' | 'bar' | 'serveur') => {
     const tableNumero = getTableNumero(cmd.tableId);
     const serveurNom = getServeurNom(cmd.serveurId) || '—';
     const dateStr = new Date(cmd.dateCommande).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const cmdRef = 'CMD-' + String(cmd.id).padStart(4, '0');
     const total = Number(cmd.montantTotal || 0).toFixed(2);
     let articles: any[] = [], titre = '', avecPrix = false, avecTotal = false;
-    switch (type) { case 'cuisine': titre = 'CUISINE'; articles = getDetailsCuisine(cmd); break; case 'bar': titre = 'BAR'; articles = getDetailsBar(cmd); break; case 'serveur': titre = 'SERVEUR'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; case 'caisse': titre = 'CAISSE'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; }
+    switch (type) { case 'cuisine': titre = 'CUISINE'; articles = getDetailsCuisine(cmd); break; case 'bar': titre = 'BAR'; articles = getDetailsBar(cmd); break; case 'serveur': titre = 'SERVEUR'; articles = cmd.details || []; avecPrix = true; avecTotal = true; break; }
 
     const width = 42;
     const dash = '-'.repeat(width);
@@ -234,20 +242,23 @@ export default function ReceptionnisteScreen() {
     lines.push(dash);
     lines.push(`Table: ${tableNumero}  ${cmdRef}`);
     lines.push(dateStr);
-    if (type === 'serveur' || type === 'caisse') lines.push(`Serveur: ${serveurNom}`);
+    if (type === 'serveur') lines.push(`Serveur: ${serveurNom}`);
     lines.push(dash);
     articles.forEach((d: any) => {
       const qte = `x${d.quantite}`;
-      const nom = (d.menu?.nom || 'Plat').substring(0, 25);
+      const prixStr = avecPrix
+        ? `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`
+        : '';
+      const maxNom = Math.max(10, width - qte.length - 1 - prixStr.length - (avecPrix ? 1 : 0));
+      const nomBrut = d.menu?.nom || 'Plat';
+      const nom = nomBrut.length > maxNom ? nomBrut.substring(0, maxNom) : nomBrut;
       if (avecPrix) {
-        const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`;
-        lines.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`);
+        lines.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prixStr.length))}${prixStr}`);
       } else {
         lines.push(`${qte} ${nom}`);
       }
     });
     if (avecTotal) { lines.push(dash); lines.push('TOTAL' + ' '.repeat(Math.max(1, width - 5 - total.length - devise.length - 1)) + `${total} ${devise}`); }
-    if (type === 'caisse') lines.push(`Ref: ${cmdRef}`);
     lines.push(dash);
 
     try {
@@ -257,46 +268,20 @@ export default function ReceptionnisteScreen() {
     } catch { showToast.error('Erreur impression'); }
   };
 
-  // Imprimer les tickets groupés sur l'imprimante physique
+  // Imprimer les tickets groupés par destination (appel backend)
   const imprimerTout = async (item: any) => {
     const commandes = item.commandes || [item];
-    const tableNumero = item.tableNumero || getTableNumero(item.tableId);
-    const serveurNom = getServeurNom(item.serveurId) || '—';
-    const total = Number(commandes.reduce((s: number, c: any) => s + Number(c.montantTotal || 0), 0)).toFixed(2);
-    const allDetails: any[] = [], allCuisine: any[] = [], allBar: any[] = [], refs: string[] = [];
-    commandes.forEach((cmd: any) => {
-      refs.push('CMD-' + String(cmd.id).padStart(4, '0'));
-      allDetails.push(...(cmd.details || []));
-      allCuisine.push(...getDetailsCuisine(cmd));
-      allBar.push(...getDetailsBar(cmd));
-    });
-    const refStr = refs.join(' · ');
-    const width = 42; const dash = '-'.repeat(width);
-    const center = (t: string) => ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t;
-    const bloc = (t: string, items: any[], avecPrix: boolean, avecTotal: boolean, ref?: boolean) => {
-      const bl: string[] = [];
-      bl.push(center(t)); bl.push('  ' + refStr); bl.push(dash);
-      items.forEach((d: any) => {
-        const qte = `x${d.quantite}`; const nom = (d.menu?.nom || 'Plat').substring(0, 25);
-        if (avecPrix) { const prix = `${(Number(d.prix || 0) * d.quantite).toFixed(2)} ${devise}`; bl.push(`${qte} ${nom}${' '.repeat(Math.max(1, width - qte.length - nom.length - prix.length))}${prix}`); }
-        else bl.push(`${qte} ${nom}`);
-      });
-      if (avecTotal) { bl.push(dash); bl.push('TOTAL' + ' '.repeat(Math.max(1, width - 5 - total.length - devise.length - 1)) + `${total} ${devise}`); }
-      if (ref) bl.push('Ref: ' + refStr);
-      return bl.join('\n');
-    };
-    const contenu = [
-      center('RestoPro'), center(`Table: ${tableNumero} · Serveur: ${serveurNom}`), dash,
-      bloc('CUISINE', allCuisine, false, false), '--- ✂ ---',
-      bloc('BAR', allBar, false, false), '--- ✂ ---',
-      bloc('SERVEUR', allDetails, true, true), '--- ✂ ---',
-      bloc('CAISSE', allDetails, true, true, true), dash,
-    ].join('\n');
 
     try {
-      const { data } = await printerApi.printTicket(contenu, 'Commande ' + refStr);
-      if (data.ok) showToast.success('Tickets imprimés');
-      else showToast.error(data.message || 'Échec');
+      // Envoyer chaque commande au backend pour impression par destination
+      for (const cmd of commandes) {
+        const { data } = await printerApi.printCommandeTickets(cmd.id);
+        if (!data.ok) {
+          showToast.error(data.message || 'Échec impression');
+          return;
+        }
+      }
+      showToast.success('🧾 Tickets imprimés et découpés par destination');
     } catch { showToast.error('Erreur impression'); }
   };
 
@@ -496,7 +481,7 @@ export default function ReceptionnisteScreen() {
         </ScrollView>
       </View>
 
-      {/* Barre de recherche (filtre unique pour les 3 onglets) */}
+      {/* Barre de recherche */}
       <View style={styles.searchRow}>
         <View style={styles.searchInputWrap}>
           <TextInput
@@ -513,15 +498,8 @@ export default function ReceptionnisteScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <View style={styles.searchInputWrap}>
-          <TouchableOpacity style={{ flex: 1, justifyContent: 'center', height: 36 }} onPress={() => setShowDatePicker(true)}>
-            <Text style={{ fontSize: 12, color: Colors.text }}>📅 {formatDisplay(filterDate)}</Text>
-          </TouchableOpacity>
-          {filterDate !== aujourdhui && (
-            <TouchableOpacity onPress={() => setFilterDate(aujourdhui)}>
-              <Text style={styles.searchClear}>↺</Text>
-            </TouchableOpacity>
-          )}
+        <View style={styles.todayBadge}>
+          <Text style={styles.todayBadgeText}>📅 Aujourd'hui</Text>
         </View>
       </View>
 
@@ -534,7 +512,6 @@ export default function ReceptionnisteScreen() {
             onPress={() => {
               setActiveTab(tab.key);
               setSearchTerm('');
-              setFilterDate('');
             }}
           >
             <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
@@ -649,38 +626,6 @@ export default function ReceptionnisteScreen() {
               </View>
             </View>}
 
-            {/* Ticket CAISSE (Mode 2 uniquement) */}
-            {!isModeServeur && <View style={[styles.ticketBlock, { backgroundColor: '#FFF8E1', borderColor: '#FFC107' }]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <Text style={[styles.ticketHeader, { marginBottom: 0 }]}>💰 CAISSE</Text>
-                <TouchableOpacity onPress={() => imprimerTicket(ticketCmd, 'caisse')} style={styles.printSmallBtn}>
-                  <Text style={{ fontSize: 12 }}>🖨</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.ticketTableLine}>
-                Table {ticketCmd ? getTableNumero(ticketCmd.tableId) : '?'} · #{String(ticketCmd?.id || 0).padStart(4, '0')}
-              </Text>
-              <Text style={styles.ticketTableLine}>Serveur : {ticketCmd ? getServeurNom(ticketCmd.serveurId) || '?' : '?'}</Text>
-              {(ticketCmd?.details || []).map((d: any, i: number) => (
-                <View key={i} style={styles.ticketItemRow}>
-                  <Text style={styles.ticketItem}>{d.quantite}x {d.menu?.nom || 'Plat'}</Text>
-                  <Text style={styles.ticketItemPrix}>
-                    {formatPrixDevise(Number(d.prix) * d.quantite, devise)}
-                  </Text>
-                </View>
-              ))}
-              <View style={styles.ticketSeparator} />
-              <View style={styles.ticketItemRow}>
-                <Text style={styles.ticketTotalLabel}>TOTAL À PAYER</Text>
-                <Text style={[styles.ticketTotalValue, { color: '#E65100' }]}>
-                  {formatPrixDevise(ticketCmd?.montantTotal || 0, devise)}
-                </Text>
-              </View>
-              <Text style={styles.ticketRef}>
-                Réf : CMD-{String(ticketCmd?.id || 0).padStart(4, '0')}
-              </Text>
-            </View>}
-
             <TouchableOpacity style={styles.ticketClose} onPress={() => setShowTickets(false)}>
               <Text style={styles.ticketCloseText}>Fermer</Text>
             </TouchableOpacity>
@@ -730,8 +675,6 @@ export default function ReceptionnisteScreen() {
           </View>
         </View>
       </Modal>
-      {/* Calendrier */}
-      <CalendarPicker visible={showDatePicker} value={filterDate} onSelect={(d: string) => { setFilterDate(d); setShowDatePicker(false); }} onClose={() => setShowDatePicker(false)} />
     </View>
   );
 }
@@ -786,6 +729,11 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, height: 36, fontSize: 12, color: Colors.text },
   searchClear: { fontSize: 14, color: Colors.textLight, paddingLeft: 6 },
+  todayBadge: {
+    backgroundColor: '#E8F5E9', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  todayBadgeText: { fontSize: 12, fontWeight: '700', color: '#2E7D32' },
 
   // Liste
   list: { padding: 12, paddingBottom: 20 },

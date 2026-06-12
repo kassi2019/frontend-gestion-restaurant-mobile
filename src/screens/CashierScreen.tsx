@@ -282,9 +282,13 @@ export default function CashierScreen() {
                   <Text style={styles.receiptTotalValue}>{formatPrixDevise(receiptData.montant, devise)}</Text>
                 </View>
 
-                {/* Btn imprimer */}
-                <TouchableOpacity style={styles.printBtn} onPress={handlePrintReceipt}>
-                  <Text style={styles.printBtnText}>🖨 Imprimer le reçu</Text>
+                {/* Notice impression auto + bouton réimpression */}
+                <View style={styles.autoPrintNotice}>
+                  <Text style={styles.autoPrintIcon}>✅</Text>
+                  <Text style={styles.autoPrintText}>Reçu imprimé automatiquement</Text>
+                </View>
+                <TouchableOpacity style={styles.reprintBtn} onPress={handlePrintReceipt}>
+                  <Text style={styles.reprintBtnText}>🔄 Réimprimer le reçu</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.closeReceiptBtn}
@@ -388,6 +392,18 @@ const styles = StyleSheet.create({
   printBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
   printPhysiqueBtn: { backgroundColor: '#16a34a', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   printBtnText: { color: Colors.textWhite, fontWeight: '700', fontSize: 15 },
+  autoPrintNotice: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#E8F5E9', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 16,
+    marginTop: 16, gap: 8,
+  },
+  autoPrintIcon: { fontSize: 16 },
+  autoPrintText: { fontSize: 14, fontWeight: '600', color: '#2E7D32' },
+  reprintBtn: {
+    backgroundColor: Colors.surface, borderRadius: 14, paddingVertical: 12,
+    alignItems: 'center', marginTop: 8, borderWidth: 1, borderColor: Colors.border,
+  },
+  reprintBtnText: { color: Colors.textLight, fontWeight: '600', fontSize: 14 },
   closeReceiptBtn: { backgroundColor: Colors.inputBg, borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 8 },
   closeReceiptText: { color: Colors.textLight, fontWeight: '600', fontSize: 14 },
 });

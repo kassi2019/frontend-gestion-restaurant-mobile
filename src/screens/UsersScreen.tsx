@@ -47,6 +47,7 @@ const ROLE_OPTIONS = ['ADMIN', 'MANAGER', 'RECEPTIONNISTE', 'SERVEUR', 'CUISINE'
 export default function UsersScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const isManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const { sp } = useResponsive();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,13 +91,17 @@ export default function UsersScreen() {
   const openModulesEdit = async (u: any) => {
     setEditingUserModules(u);
     try {
-      let { data } = await authApi.getModules();
-      // SUPER_ADMIN uniquement peut voir/assigner "Générer codes"
-      if (user?.role !== 'SUPER_ADMIN') {
-        data = (data || []).filter((m: any) => m.route !== '/super/codes');
+      let modulesList: any[];
+      if (isSuperAdmin) {
+        // Super Admin voit tous les modules
+        const { data } = await authApi.getModules();
+        modulesList = data || [];
+      } else {
+        // Admin/Manager : uniquement leurs propres modules (depuis le store)
+        modulesList = user?.modules || [];
       }
-      setAvailableModules(data || []);
-      // Précharger les modules existants (userModules chargés par l'API)
+      setAvailableModules(modulesList);
+      // Précharger les modules existants de l'utilisateur édité
       const mods: number[] = u.userModules?.map((um: any) => um.module?.id).filter(Boolean) || [];
       setSelectedModuleIds(new Set(mods));
     } catch {}
@@ -225,7 +230,7 @@ export default function UsersScreen() {
       />
 
       {isManager && (
-        <TouchableOpacity style={styles.fab} onPress={async () => { setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' }); setSelectedModuleIds(new Set()); try { const { data } = await authApi.getModules(); setAvailableModules(data || []); } catch {} setShowCreateModal(true); }}>
+        <TouchableOpacity style={styles.fab} onPress={async () => { setCreateForm({ nom: '', telephone: '', mot_de_passe: '', role: 'SERVEUR' }); setSelectedModuleIds(new Set()); try { if (isSuperAdmin) { const { data } = await authApi.getModules(); setAvailableModules(data || []); } else { setAvailableModules(user?.modules || []); } } catch {} setShowCreateModal(true); }}>
           <Text style={styles.fabText}>+</Text>
         </TouchableOpacity>
       )}
@@ -473,4 +478,7 @@ const styles = StyleSheet.create({
   moduleChipText: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
   moduleChipTextActive: { color: Colors.primary, fontWeight: '700' },
   fullBtn: { backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalClose: { padding: 8 },
+  modalCloseText: { fontSize: 20, color: Colors.textLight, fontWeight: '600' },
 });

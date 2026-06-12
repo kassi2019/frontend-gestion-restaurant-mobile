@@ -29,6 +29,7 @@ import EvaluationsScreen from '../screens/EvaluationsScreen';
 import GenerateCodesScreen from '../screens/GenerateCodesScreen';
 import DashboardAdminScreen from '../screens/DashboardAdminScreen';
 import HistoriqueAbonnementScreen from '../screens/HistoriqueAbonnementScreen';
+import RestaurantModulesScreen from '../screens/RestaurantModulesScreen';
 import { SERVER_URL } from '../config';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
@@ -47,6 +48,15 @@ const TAB_ICONS: Record<string, string> = {
 
 const SERVER = SERVER_URL;
 
+const TAB_MODULE_NAMES: Record<string, string> = {
+  Tables: 'Tables',
+  Commandes: 'Commandes',
+  Menu: 'Menu',
+  Planning: 'Planning',
+  Users: 'Users',
+  Notifications: 'Notifications',
+};
+
 function MainTabs() {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<any>();
@@ -55,6 +65,17 @@ function MainTabs() {
   const photoUri = user?.photo
     ? (user.photo.startsWith('http') ? user.photo : SERVER + user.photo)
     : null;
+
+  // Modules auxquels l'utilisateur a accès (nom des modules)
+  const userModuleNames = new Set(user?.modules?.map(m => m.nom) || []);
+
+  // Un onglet est visible si l'utilisateur a le module correspondant, ou si c'est l'Accueil
+  const isTabVisible = (tabName: string) => {
+    if (tabName === 'Accueil') return true;
+    if (isSuperAdmin) return true;
+    const moduleName = TAB_MODULE_NAMES[tabName];
+    return moduleName ? userModuleNames.has(moduleName) : true;
+  };
 
   return (
     <Tab.Navigator
@@ -118,12 +139,12 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Accueil" component={isSuperAdmin ? DashboardAdminScreen : DashboardScreen} />
-      <Tab.Screen name="Tables" component={TablesScreen} />
-      <Tab.Screen name="Commandes" component={CommandesScreen} />
-      <Tab.Screen name="Menu" component={MenuScreen} />
-      <Tab.Screen name="Planning" component={PlanningScreen} />
-      <Tab.Screen name="Users" component={UsersScreen} options={{ tabBarLabel: 'Users' }} />
-      <Tab.Screen name="Notifications" component={NotificationsScreen} />
+      {isTabVisible('Tables') && <Tab.Screen name="Tables" component={TablesScreen} />}
+      {isTabVisible('Commandes') && <Tab.Screen name="Commandes" component={CommandesScreen} />}
+      {isTabVisible('Menu') && <Tab.Screen name="Menu" component={MenuScreen} />}
+      {isTabVisible('Planning') && <Tab.Screen name="Planning" component={PlanningScreen} />}
+      {isTabVisible('Users') && <Tab.Screen name="Users" component={UsersScreen} options={{ tabBarLabel: 'Users' }} />}
+      {isTabVisible('Notifications') && <Tab.Screen name="Notifications" component={NotificationsScreen} />}
     </Tab.Navigator>
   );
 }
@@ -175,6 +196,7 @@ export default function AppNavigator() {
             <Stack.Screen name="GenerateCodes" component={GenerateCodesScreen} options={{ headerShown: true, headerTitle: 'Générer des codes', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="DashboardAdmin" component={DashboardAdminScreen} options={{ headerShown: true, headerTitle: 'Tableau de bord', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="HistoriqueAbonnement" component={HistoriqueAbonnementScreen} options={{ headerShown: true, headerTitle: 'Historique abonnement', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen name="RestaurantModules" component={RestaurantModulesScreen} options={{ headerShown: true, headerTitle: '🧩 Modules Restaurant', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
           </>
         )}
       </Stack.Navigator>

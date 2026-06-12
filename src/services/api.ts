@@ -45,6 +45,8 @@ export const authApi = {
   getProfile: () => api.get('/auth/profile'),
   getModules: () => api.get('/auth/modules'),
   updateUserModules: (userId: number, moduleIds: number[]) => api.post(`/auth/users/${userId}/modules`, { moduleIds }),
+  getRestaurantModules: (restaurantId: number) => api.get(`/auth/restaurants/${restaurantId}/modules`),
+  updateRestaurantModules: (restaurantId: number, moduleIds: number[]) => api.post(`/auth/restaurants/${restaurantId}/modules`, { moduleIds }),
   forgotPassword: (data: { telephone: string; newPassword: string }) =>
     api.post('/auth/forgot-password', data),
   changePassword: (data: { oldPassword: string; newPassword: string }) =>
@@ -203,7 +205,10 @@ export const printerApi = {
   updateConfig: (data: any) => api.post('/printer/config', data),
   testPrint: () => api.post('/printer/test'),
   printFacture: (id: number) => api.post(`/printer/facture/${id}`),
-  printTicket: (contenu: string, titre?: string) => api.post('/printer/ticket', { contenu, titre }),
+  printTicket: (contenu: string, titre?: string, destination?: string) =>
+    api.post('/printer/ticket', { contenu, titre, destination }),
+  printCommandeTickets: (commandeId: number) =>
+    api.post(`/printer/commande/${commandeId}/tickets`),
 };
 
 export const statistiquesApi = {

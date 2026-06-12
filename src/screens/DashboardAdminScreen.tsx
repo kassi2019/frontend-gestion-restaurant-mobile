@@ -92,27 +92,40 @@ export default function DashboardAdminScreen() {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>🏪 Restaurants</Text>
             {data.restaurants?.map((r: any) => (
-              <TouchableOpacity
-                key={r.id}
-                style={styles.restoRow}
-                onPress={() => navigation.navigate('HistoriqueAbonnement', { restaurantId: r.id, restaurantNom: r.nom })}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.restoName}>{r.nom}</Text>
-                  <Text style={styles.restoMeta}>
-                    {r.typeAbonnement === 'TRIAL' ? '🆓 Essai' :
-                     r.typeAbonnement === 'MENSUEL' ? '📅 Mensuel' :
-                     r.typeAbonnement === 'ANNUEL' ? '📆 Annuel' : r.typeAbonnement}
-                    {' · '}{r._count?.utilisateurs || 0} utilisateurs
-                  </Text>
-                  {r.dateFinAbonnement && (
+              <View key={r.id} style={styles.restoRow}>
+                <TouchableOpacity
+                  style={{ flex: 1 }}
+                  onPress={() => navigation.navigate('HistoriqueAbonnement', { restaurantId: r.id, restaurantNom: r.nom })}
+                >
+                  <View>
+                    <Text style={styles.restoName}>{r.nom}</Text>
                     <Text style={styles.restoMeta}>
-                      Expire le {format(r.dateFinAbonnement)}
+                      {r.typeAbonnement === 'TRIAL' ? '🆓 Essai' :
+                       r.typeAbonnement === 'MENSUEL' ? '📅 Mensuel' :
+                       r.typeAbonnement === 'ANNUEL' ? '📆 Annuel' : r.typeAbonnement}
+                      {' · '}{r._count?.utilisateurs || 0} utilisateurs
                     </Text>
-                  )}
-                </View>
-                <Text style={styles.arrow}>›</Text>
-              </TouchableOpacity>
+                    {r.dateFinAbonnement && (
+                      <Text style={styles.restoMeta}>
+                        Expire le {format(r.dateFinAbonnement)}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.moduleBtn}
+                  onPress={() => navigation.navigate('RestaurantModules', { restaurantId: r.id, restaurantNom: r.nom })}
+                >
+                  <Text style={styles.moduleBtnIcon}>🧩</Text>
+                  <Text style={styles.moduleBtnLabel}>Modules</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.arrowBtn}
+                  onPress={() => navigation.navigate('HistoriqueAbonnement', { restaurantId: r.id, restaurantNom: r.nom })}
+                >
+                  <Text style={styles.arrow}>›</Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         </>
@@ -147,6 +160,14 @@ const styles = StyleSheet.create({
   },
   restoName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   restoMeta: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  moduleBtn: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: Colors.primary + '10', marginRight: 4,
+  },
+  moduleBtnIcon: { fontSize: 18 },
+  moduleBtnLabel: { fontSize: 9, fontWeight: '700', color: Colors.primary, marginTop: 2 },
+  arrowBtn: { paddingLeft: 4, paddingVertical: 8 },
   arrow: { fontSize: 22, color: Colors.textLight },
   emptyText: { textAlign: 'center', color: Colors.textLight, marginTop: 40 },
 });
