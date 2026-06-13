@@ -82,6 +82,19 @@ export const authApi = {
   // Dashboard Super Admin
   getDashboard: () => api.get('/auth/super-dashboard'),
   getHistorique: (restaurantId: number) => api.get(`/auth/historique/${restaurantId}`),
+  // Créer un restaurant complet (Super Admin uniquement)
+  creerRestaurant: (data: {
+    nom: string;
+    adresse: string;
+    telephone?: string;
+    devise?: string;
+    typeAbonnement?: string;
+    dureeJours: number;
+    adminNom: string;
+    adminTelephone: string;
+    adminMotDePasse: string;
+    moduleIds: number[];
+  }) => api.post('/auth/creer-restaurant', data),
 };
 
 export const menuApi = {

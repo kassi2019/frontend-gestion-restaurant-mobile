@@ -217,9 +217,17 @@ export default function RestaurantSettingsScreen() {
     if (!zoneForm.nom) { showToast.error('Nom requis'); return; }
     const c = parseFloat(zoneForm.coefficient) || 1.0;
     try {
-      if (editingZone) { await zonesApi.update(editingZone.id, { nom: zoneForm.nom, coefficient: c }); showToast.success('Zone modifiée'); }
-      else { await zonesApi.create({ nom: zoneForm.nom, coefficient: c }); showToast.success('Zone créée'); }
-      setShowZoneForm(false); zonesApi.getAll().then(r => setZones(r.data || [])).catch(() => {});
+      if (editingZone) {
+        await zonesApi.update(editingZone.id, { nom: zoneForm.nom, coefficient: c });
+        showToast.success('Zone modifiée');
+        setShowZoneForm(false);
+      } else {
+        await zonesApi.create({ nom: zoneForm.nom, coefficient: c });
+        showToast.success('Zone créée');
+        // Réinitialiser le formulaire pour permettre d'ajouter une autre zone
+        setZoneForm({ nom: '', coefficient: '1.0' });
+      }
+      zonesApi.getAll().then(r => setZones(r.data || [])).catch(() => {});
     } catch { showToast.error('Erreur'); }
   };
 
@@ -434,7 +442,7 @@ export default function RestaurantSettingsScreen() {
                 )}
 
                 {/* Activation par code (ancien système) */}
-                <View style={styles.aboActivation}>
+                {/* <View style={styles.aboActivation}>
                   <Text style={styles.aboActivationTitle}>🔑 Activer un code</Text>
                   <Text style={{ fontSize: 11, color: Colors.textLight, marginBottom: 8 }}>
                     Si vous avez reçu un code du Super Admin.
@@ -458,7 +466,7 @@ export default function RestaurantSettingsScreen() {
                       <Text style={styles.saveBtnText}>Activer l'abonnement</Text>
                     )}
                   </TouchableOpacity>
-                </View>
+                </View> */}
               </>
             ) : null}
           </View>

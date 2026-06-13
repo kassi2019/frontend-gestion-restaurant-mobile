@@ -30,6 +30,7 @@ import GenerateCodesScreen from '../screens/GenerateCodesScreen';
 import DashboardAdminScreen from '../screens/DashboardAdminScreen';
 import HistoriqueAbonnementScreen from '../screens/HistoriqueAbonnementScreen';
 import RestaurantModulesScreen from '../screens/RestaurantModulesScreen';
+import CreerRestaurantScreen from '../screens/CreerRestaurantScreen';
 import { SERVER_URL } from '../config';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
@@ -197,6 +198,7 @@ export default function AppNavigator() {
             <Stack.Screen name="DashboardAdmin" component={DashboardAdminScreen} options={{ headerShown: true, headerTitle: 'Tableau de bord', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="HistoriqueAbonnement" component={HistoriqueAbonnementScreen} options={{ headerShown: true, headerTitle: 'Historique abonnement', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="RestaurantModules" component={RestaurantModulesScreen} options={{ headerShown: true, headerTitle: '🧩 Modules Restaurant', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen name="CreerRestaurant" component={CreerRestaurantScreen} options={{ headerShown: true, headerTitle: '🏪 Nouveau restaurant', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
           </>
         )}
       </Stack.Navigator>

@@ -306,9 +306,9 @@ export default function TablesScreen() {
           <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
             <Text style={styles.fabText}>+</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.assignFab} onPress={() => navigation.navigate('AssignTables')}>
+          {/* <TouchableOpacity style={styles.assignFab} onPress={() => navigation.navigate('AssignTables')}>
             <Text style={styles.assignFabText}>👤</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </>
       )}
 
@@ -483,11 +483,11 @@ export default function TablesScreen() {
       </Modal>
 
       {/* Daily Check button (Manager only) */}
-      {canViewAll && (
+      {/* {canViewAll && (
         <TouchableOpacity style={styles.checkFab} onPress={handleRunDailyCheck}>
           <Text style={styles.checkFabText}>🔄</Text>
         </TouchableOpacity>
-      )}
+      )} */}
     </View>
   );
 }
