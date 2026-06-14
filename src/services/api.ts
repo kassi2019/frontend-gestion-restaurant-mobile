@@ -122,6 +122,11 @@ export const menuApi = {
   addVariant: (menuId: number, data: { nom: string; prix: number }) => api.post(`/menu/${menuId}/variants`, data),
   updateVariant: (variantId: number, data: { nom?: string; prix?: number }) => api.patch(`/menu/variants/${variantId}`, data),
   deleteVariant: (variantId: number) => api.delete(`/menu/variants/${variantId}`),
+  // Accompagnements gratuits
+  getAccompagnements: (menuId: number) => api.get(`/menu/${menuId}/accompagnements`),
+  addAccompagnement: (menuId: number, nom: string) => api.post(`/menu/${menuId}/accompagnements`, { nom }),
+  updateAccompagnement: (id: number, nom: string) => api.patch(`/menu/accompagnements/${id}`, { nom }),
+  deleteAccompagnement: (id: number) => api.delete(`/menu/accompagnements/${id}`),
 };
 
 export const tablesApi = {

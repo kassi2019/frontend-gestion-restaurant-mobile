@@ -56,6 +56,7 @@ export default function MenuScreen() {
   const [showCatPickerEdit, setShowCatPickerEdit] = useState(false);
   const [newMenu, setNewMenu] = useState({ nom: '', prix: '', categorieId: 0 });
   const [editMenuState, setEditMenuState] = useState({ id: 0, nom: '', prix: '', categorieId: 0 });
+  const [newMenuAccomp, setNewMenuAccomp] = useState('');
   const [newCat, setNewCat] = useState({ nom: '', ordreService: '1', destination: 'CUISINE' });
   const [menuImage, setMenuImage] = useState<string | null>(null);
   const [editMenuImage, setEditMenuImage] = useState<string | null>(null);
@@ -67,6 +68,13 @@ export default function MenuScreen() {
   const [newVariant, setNewVariant] = useState({ nom: '', prix: '' });
   const [variantLoading, setVariantLoading] = useState(false);
   const [expandedVariants, setExpandedVariants] = useState<Set<number>>(new Set());
+  // Accompagnements
+  const [showAccompModal, setShowAccompModal] = useState(false);
+  const [accompMenuId, setAccompMenuId] = useState(0);
+  const [accompMenuName, setAccompMenuName] = useState('');
+  const [accompList, setAccompList] = useState<any[]>([]);
+  const [newAccomp, setNewAccomp] = useState('');
+  const [expandedAccomps, setExpandedAccomps] = useState<Set<number>>(new Set());
 
   const handleImportCsv = async () => {
     try {
@@ -147,11 +155,16 @@ export default function MenuScreen() {
   const handleAddMenu = async () => {
     if (!newMenu.nom || !newMenu.prix) return Alert.alert('Erreur', 'Remplissez tous les champs');
     try {
-      const res = await menuApi.createMenu({
+      const payload: any = {
         nom: newMenu.nom,
         prix: parseFloat(parseMontant(newMenu.prix)),
         categorieId: newMenu.categorieId || categories[0]?.id,
-      });
+      };
+      // Ajouter les accompagnements si présents
+      if (newMenuAccomp.trim()) {
+        payload.accompagnements = newMenuAccomp.split(',').map((n: string) => n.trim()).filter(Boolean);
+      }
+      const res = await menuApi.createMenu(payload);
       if (menuImage) {
         const formData = new FormData();
         formData.append('image', { uri: menuImage, type: 'image/jpeg', name: 'menu.jpg' } as any);
@@ -159,6 +172,7 @@ export default function MenuScreen() {
       }
       setNewMenu({ nom: '', prix: '', categorieId: 0 });
       setMenuImage(null);
+      setNewMenuAccomp('');
       showToast.success(`Plat "${newMenu.nom}" créé`);
       loadData();
     } catch (err) {
@@ -223,6 +237,50 @@ export default function MenuScreen() {
         } catch {}
       }},
     ]);
+  };
+
+  // ---- Accompagnements ----
+  const openAccompagnements = (menu: any) => {
+    setAccompMenuId(menu.id);
+    setAccompMenuName(menu.nom);
+    setAccompList(menu.accompagnements || []);
+    setNewAccomp('');
+    setShowAccompModal(true);
+  };
+
+  const handleAddAccomp = async () => {
+    if (!newAccomp.trim()) { showToast.error('Nom requis'); return; }
+    try {
+      await menuApi.addAccompagnement(accompMenuId, newAccomp.trim());
+      showToast.success('Accompagnement ajouté');
+      setNewAccomp('');
+      const { data } = await menuApi.getAccompagnements(accompMenuId);
+      setAccompList(data || []);
+      loadData();
+    } catch (err: any) { showToast.error(err.response?.data?.message || 'Erreur'); }
+  };
+
+  const handleDeleteAccomp = (id: number) => {
+    Alert.alert('Supprimer', 'Supprimer cet accompagnement ?', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: async () => {
+        try {
+          await menuApi.deleteAccompagnement(id);
+          showToast.success('Accompagnement supprimé');
+          setAccompList(prev => prev.filter(a => a.id !== id));
+          loadData();
+        } catch {}
+      }},
+    ]);
+  };
+
+  const toggleAccomps = (menuId: number) => {
+    setExpandedAccomps(prev => {
+      const next = new Set(prev);
+      if (next.has(menuId)) next.delete(menuId);
+      else next.add(menuId);
+      return next;
+    });
   };
 
   const handleDeleteMenu = (item: any) => {
@@ -371,6 +429,26 @@ export default function MenuScreen() {
                 ))}
               </View>
             )}
+
+            {/* Accompagnements gratuits */}
+            {(item.accompagnements?.length || 0) > 0 && (
+              <View>
+                <TouchableOpacity style={styles.accompToggle} onPress={() => toggleAccomps(item.id)}>
+                  <Text style={styles.accompToggleText}>
+                    🎁 {item.accompagnements.length} accompagnement(s) offert(s) {expandedAccomps.has(item.id) ? '▲' : '▼'}
+                  </Text>
+                </TouchableOpacity>
+                {expandedAccomps.has(item.id) && (
+                  <View style={styles.accompDropdown}>
+                    {item.accompagnements.map((a: any) => (
+                      <View key={a.id} style={styles.accompDropdownItem}>
+                        <Text style={styles.accompDropdownName}>✓ {a.nom}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         )}}
         ListEmptyComponent={
@@ -409,6 +487,13 @@ export default function MenuScreen() {
             onPress: () => {
               setShowActionModal(false);
               openVariants(selectedMenu);
+            },
+          },
+          {
+            icon: '🎁', label: 'Accompagnements gratuits',
+            onPress: () => {
+              setShowActionModal(false);
+              openAccompagnements(selectedMenu);
             },
           },
           {
@@ -460,10 +545,19 @@ export default function MenuScreen() {
                   <Text style={styles.imageBtnText}>📷 Choisir une photo</Text>
                 )}
               </TouchableOpacity>
+              <Text style={styles.fieldLabel}>🎁 Accompagnements gratuits (optionnel)</Text>
+              <TextInput
+                style={styles.field}
+                placeholder="Ex: Attiéké, Alloco"
+                value={newMenuAccomp}
+                onChangeText={setNewMenuAccomp}
+                placeholderTextColor={Colors.textLight}
+              />
+              <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 2 }}>Séparés par des virgules. Laissez vide si aucun.</Text>
             </ScrollView>
             <View style={{ marginTop: 24 }}>
               <TouchableOpacity style={styles.fullSaveBtn} onPress={handleAddMenu}><Text style={styles.saveText}>Ajouter le plat</Text></TouchableOpacity>
-              <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 8 }} onPress={() => setShowAddModal(false)}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
+              <TouchableOpacity style={{ paddingVertical: 12, alignItems: 'center', marginTop: 8 }} onPress={() => { setShowAddModal(false); setNewMenuAccomp(''); }}><Text style={styles.cancelText}>Annuler</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -562,6 +656,51 @@ export default function MenuScreen() {
             <Text style={styles.viewerCloseText}>✕</Text>
           </TouchableOpacity>
           <Image source={{ uri: viewerImageUri }} style={styles.viewerImage} resizeMode="contain" />
+        </View>
+      </Modal>
+
+      {/* Accompagnements Modal */}
+      <Modal visible={showAccompModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>🎁 Accompagnements — {accompMenuName}</Text>
+              <TouchableOpacity onPress={() => setShowAccompModal(false)} style={styles.modalClose}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {accompList.length > 0 ? (
+              accompList.map((a: any) => (
+                <View key={a.id} style={[styles.variantItem, { backgroundColor: '#E8F5E9', borderColor: '#C8E6C9' }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.variantName}>🎁 {a.nom}</Text>
+                    <Text style={{ fontSize: 11, color: '#2E7D32', marginTop: 2 }}>Offert</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => handleDeleteAccomp(a.id)} style={styles.variantDeleteBtn}>
+                    <Text style={styles.variantDeleteText}>🗑</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <Text style={{ color: Colors.textLight, textAlign: 'center', paddingVertical: 20 }}>Aucun accompagnement</Text>
+            )}
+
+            <View style={{ borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 16, marginTop: 8 }}>
+              <Text style={{ fontWeight: '700', color: Colors.text, marginBottom: 12 }}>+ Ajouter un accompagnement</Text>
+              <TextInput
+                style={styles.field}
+                placeholder="Ex: Attiéké"
+                value={newAccomp}
+                onChangeText={setNewAccomp}
+                onSubmitEditing={handleAddAccomp}
+                placeholderTextColor={Colors.textLight}
+              />
+              <TouchableOpacity style={[styles.fullSaveBtn, { backgroundColor: '#4CAF50' }]} onPress={handleAddAccomp}>
+                <Text style={styles.saveText}>✅ Ajouter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -760,4 +899,21 @@ const styles = StyleSheet.create({
   },
   variantDropdownName: { fontSize: 13, fontWeight: '600', color: Colors.text },
   variantDropdownPrice: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  // Accompagnements inline
+  accompToggle: {
+    backgroundColor: '#E8F5E9', marginHorizontal: 12, marginTop: 4, marginBottom: 2,
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#C8E6C9',
+  },
+  accompToggleText: { fontSize: 12, fontWeight: '600', color: '#2E7D32', textAlign: 'center' },
+  accompDropdown: {
+    backgroundColor: '#F1F8E9', marginHorizontal: 12, marginBottom: 8,
+    borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#C8E6C9', borderTopWidth: 0,
+  },
+  accompDropdownItem: {
+    paddingVertical: 4,
+  },
+  accompDropdownName: { fontSize: 13, fontWeight: '500', color: '#33691E' },
 });
