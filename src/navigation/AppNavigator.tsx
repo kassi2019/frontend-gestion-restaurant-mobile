@@ -5,7 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector, useDispatch } from 'react-redux';
 import Toast from 'react-native-toast-message';
-import { RootState, AppDispatch } from '../store';
+import { store, RootState, AppDispatch } from '../store';
 import { restoreSession, logout } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
 import LoginScreen from '../screens/LoginScreen';
@@ -62,7 +62,9 @@ function MainTabs() {
   const dispatch = useDispatch<AppDispatch>();
   const navigation = useNavigation<any>();
   const user = useSelector((state: RootState) => state.auth.user);
+  const abonnementExpire = useSelector((state: RootState) => state.auth.abonnementExpire);
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isAdminExpired = abonnementExpire && user?.role === 'ADMIN';
   const photoUri = user?.photo
     ? (user.photo.startsWith('http') ? user.photo : SERVER + user.photo)
     : null;
@@ -74,9 +76,29 @@ function MainTabs() {
   const isTabVisible = (tabName: string) => {
     if (tabName === 'Accueil') return true;
     if (isSuperAdmin) return true;
+    // Si abonnement expiré et ADMIN, masquer tous les onglets sauf Accueil
+    if (isAdminExpired) return false;
     const moduleName = TAB_MODULE_NAMES[tabName];
     return moduleName ? userModuleNames.has(moduleName) : true;
   };
+
+  // Rediriger l'ADMIN vers RestaurantSettings si abonnement expiré
+  useEffect(() => {
+    if (isAdminExpired) {
+      const timer = setTimeout(() => {
+        // Reset la stack pour que RestaurantSettings soit le seul écran
+        // Ainsi l'ADMIN ne peut pas revenir en arrière
+        navigation.reset({
+          index: 0,
+          routes: [{
+            name: 'RestaurantSettings',
+            params: { abonnementExpire: true },
+          }],
+        });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isAdminExpired, navigation]);
 
   return (
     <Tab.Navigator
@@ -152,8 +174,21 @@ function MainTabs() {
 
 export default function AppNavigator() {
   const dispatch = useDispatch<AppDispatch>();
-  const { token } = useSelector((state: RootState) => state.auth);
+  const { token, user, abonnementExpire } = useSelector((state: RootState) => state.auth);
   const [checking, setChecking] = useState(true);
+
+  const isAdminExpired = abonnementExpire && user?.role === 'ADMIN';
+
+  // Empêcher le retour arrière sur Android quand abonnement expiré
+  useEffect(() => {
+    if (!isAdminExpired) return;
+    const { BackHandler } = require('react-native');
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Bloquer le retour arrière — l'ADMIN doit rester sur la page d'abonnement
+      return true;
+    });
+    return () => subscription.remove();
+  }, [isAdminExpired]);
 
   useEffect(() => {
     dispatch(restoreSession()).finally(() => setChecking(false));
@@ -187,7 +222,46 @@ export default function AppNavigator() {
             <Stack.Screen name="Cashier" component={CashierScreen} options={{ headerShown: true, headerTitle: 'Caisse', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Stats" component={StatsScreen} options={{ headerShown: true, headerTitle: 'Statistiques', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, headerTitle: 'Mon Profil', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
-            <Stack.Screen name="RestaurantSettings" component={RestaurantSettingsScreen} options={{ headerShown: true, headerTitle: 'Paramètres Restaurant', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
+            <Stack.Screen
+              name="RestaurantSettings"
+              component={RestaurantSettingsScreen}
+              options={({ route }: any) => ({
+                headerShown: true,
+                headerTitle: route.params?.abonnementExpire ? '🔒 Abonnement Expiré' : 'Paramètres Restaurant',
+                headerStyle: {
+                  backgroundColor: route.params?.abonnementExpire ? '#FFF3E0' : Colors.surface,
+                },
+                headerTitleStyle: {
+                  color: route.params?.abonnementExpire ? '#E65100' : Colors.text,
+                  fontWeight: '700',
+                },
+                headerTintColor: Colors.primary,
+                // Bloquer le retour arrière si abonnement expiré
+                headerLeft: route.params?.abonnementExpire ? () => null : undefined,
+                // Bouton Quitter si abonnement expiré (pas d'autre moyen de sortir)
+                headerRight: route.params?.abonnementExpire
+                  ? () => (
+                      <TouchableOpacity
+                        onPress={() => store.dispatch(logout())}
+                        style={{
+                          marginRight: 12,
+                          paddingHorizontal: 14,
+                          paddingVertical: 8,
+                          backgroundColor: Colors.danger,
+                          borderRadius: 20,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, color: '#fff' }}>🚪</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: '#fff' }}>Quitter</Text>
+                      </TouchableOpacity>
+                    )
+                  : undefined,
+                gestureEnabled: !route.params?.abonnementExpire,
+              })}
+            />
             <Stack.Screen name="AssignTables" component={AssignTablesScreen} options={{ headerShown: true, headerTitle: 'Affecter les tables', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Stock" component={StockScreen} options={{ headerShown: true, headerTitle: '📦 Gestion de Stock', headerStyle: { backgroundColor: Colors.surface }, headerTitleStyle: { color: Colors.text, fontWeight: '700' }, headerTintColor: Colors.primary }} />
             <Stack.Screen name="Reception" component={ReceptionnisteScreen} options={{ headerShown: false }} />

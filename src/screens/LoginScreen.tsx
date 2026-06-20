@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Image,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
 import { login, clearError } from '../store/slices/authSlice';
 import { RootState, AppDispatch } from '../store';
 import { Colors } from '../theme/colors';
@@ -27,7 +28,8 @@ const { width } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const dispatch = useDispatch<AppDispatch>();
-  const { loading, error } = useSelector((state: RootState) => state.auth);
+  const navigation = useNavigation<any>();
+  const { loading, error, user, abonnementExpire } = useSelector((state: RootState) => state.auth);
   const [telephone, setTelephone] = useState('');
   const [password, setPassword] = useState('');
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -39,6 +41,7 @@ export default function LoginScreen() {
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [activationCode, setActivationCode] = useState('');
   const [activationLoading, setActivationLoading] = useState(false);
+  const hasNavigated = useRef(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -54,6 +57,24 @@ export default function LoginScreen() {
       }),
     ]).start();
   }, []);
+
+  // Rediriger l'ADMIN directement vers la page d'abonnement si expiré
+  useEffect(() => {
+    if (user && abonnementExpire && user.role === 'ADMIN' && !hasNavigated.current) {
+      hasNavigated.current = true;
+      // Petit délai pour que le stack navigator soit prêt
+      const timer = setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{
+            name: 'RestaurantSettings',
+            params: { abonnementExpire: true },
+          }],
+        });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [user, abonnementExpire, navigation]);
 
   const handleLogin = () => {
     if (!telephone.trim() || !password.trim()) return;

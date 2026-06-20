@@ -11,6 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
+import { useRoute } from '@react-navigation/native';
 import { RootState, AppDispatch } from '../store';
 import { updateUser } from '../store/slices/authSlice';
 import { Colors } from '../theme/colors';
@@ -26,12 +27,16 @@ const MENUS = [
 ];
 
 export default function RestaurantSettingsScreen() {
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user, abonnementExpire: aboExpireFromStore } = useSelector((state: RootState) => state.auth);
+  const route = useRoute<any>();
   const dispatch = useDispatch<AppDispatch>();
   const isAdmin = user?.role === 'ADMIN';
 
-  // Menu actif
-  const [activeMenu, setActiveMenu] = useState('infos');
+  // Détecter si l'abonnement est expiré (via route params ou Redux store)
+  const abonnementExpire = route.params?.abonnementExpire || aboExpireFromStore;
+
+  // Menu actif — forcer l'onglet Abonnement si expiré
+  const [activeMenu, setActiveMenu] = useState(abonnementExpire ? 'abonnement' : 'infos');
 
   // Infos restaurant
   const [nom, setNom] = useState('');
@@ -255,21 +260,36 @@ export default function RestaurantSettingsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Menu latéral ou en haut */}
-      <View style={styles.menuBar}>
-        {MENUS.map((m) => (
-          <TouchableOpacity
-            key={m.key}
-            style={[styles.menuItem, activeMenu === m.key && styles.menuItemActive]}
-            onPress={() => setActiveMenu(m.key)}
-          >
-            <Text style={styles.menuIcon}>{m.icon}</Text>
-            <Text style={[styles.menuLabel, activeMenu === m.key && styles.menuLabelActive]}>
-              {m.label}
+      {/* Bannière d'abonnement expiré */}
+      {abonnementExpire && (
+        <View style={styles.expiredBanner}>
+          <Text style={styles.expiredBannerIcon}>⚠️</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.expiredBannerTitle}>Abonnement expiré</Text>
+            <Text style={styles.expiredBannerText}>
+              Votre abonnement a expiré. Veuillez choisir un plan et effectuer le paiement pour réactiver l'accès à toutes les fonctionnalités.
             </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+          </View>
+        </View>
+      )}
+
+      {/* Menu latéral ou en haut */}
+      {!abonnementExpire && (
+        <View style={styles.menuBar}>
+          {MENUS.map((m) => (
+            <TouchableOpacity
+              key={m.key}
+              style={[styles.menuItem, activeMenu === m.key && styles.menuItemActive]}
+              onPress={() => setActiveMenu(m.key)}
+            >
+              <Text style={styles.menuIcon}>{m.icon}</Text>
+              <Text style={[styles.menuLabel, activeMenu === m.key && styles.menuLabelActive]}>
+                {m.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Contenu du menu actif */}
       <ScrollView style={styles.content}>
@@ -603,6 +623,22 @@ export default function RestaurantSettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  // Bannière abonnement expiré
+  expiredBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF3E0',
+    marginHorizontal: 12,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FFCC80',
+    gap: 10,
+  },
+  expiredBannerIcon: { fontSize: 22, marginTop: 2 },
+  expiredBannerTitle: { fontSize: 15, fontWeight: '800', color: '#E65100', marginBottom: 4 },
+  expiredBannerText: { fontSize: 13, color: '#BF360C', lineHeight: 18 },
   // Menu bar
   menuBar: {
     flexDirection: 'row', backgroundColor: Colors.surface,

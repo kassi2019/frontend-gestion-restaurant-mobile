@@ -18,6 +18,7 @@ interface User {
   dateFinAbonnement?: string | null;
   modeGestion?: string;
   modules?: ModuleInfo[];
+  abonnementExpire?: boolean;
 }
 
 interface AuthState {
@@ -25,6 +26,7 @@ interface AuthState {
   token: string | null;
   loading: boolean;
   error: string | null;
+  abonnementExpire: boolean;
 }
 
 const initialState: AuthState = {
@@ -32,17 +34,20 @@ const initialState: AuthState = {
   token: null,
   loading: false,
   error: null,
+  abonnementExpire: false,
 };
 
 export const login = createAsyncThunk(
   'auth/login',
-  
+
   async (credentials: { telephone: string; mot_de_passe: string }, { rejectWithValue }) => {
     try {
       const { data } = await authApi.login(credentials);
       try {
+        const userWithFlag = { ...data.utilisateur, abonnementExpire: data.abonnementExpire || false };
         await AsyncStorage.setItem('token', data.token);
-        await AsyncStorage.setItem('user', JSON.stringify(data.utilisateur));
+        await AsyncStorage.setItem('user', JSON.stringify(userWithFlag));
+        await AsyncStorage.setItem('abonnementExpire', JSON.stringify(data.abonnementExpire || false));
       } catch (e) {
         // AsyncStorage indisponible
       }
@@ -63,8 +68,10 @@ export const restoreSession = createAsyncThunk('auth/restore', async () => {
   try {
     const token = await AsyncStorage.getItem('token');
     const userStr = await AsyncStorage.getItem('user');
+    const abonnementExpireStr = await AsyncStorage.getItem('abonnementExpire');
     if (token && userStr) {
-      return { token, utilisateur: JSON.parse(userStr) };
+      const user = JSON.parse(userStr);
+      return { token, utilisateur: user, abonnementExpire: abonnementExpireStr === 'true' };
     }
   } catch (e) {
     // AsyncStorage indisponible
@@ -79,7 +86,8 @@ const authSlice = createSlice({
     logout: (state) => {
       state.user = null;
       state.token = null;
-      try { AsyncStorage.removeItem('token'); AsyncStorage.removeItem('user'); } catch (e) {}
+      state.abonnementExpire = false;
+      try { AsyncStorage.removeItem('token'); AsyncStorage.removeItem('user'); AsyncStorage.removeItem('abonnementExpire'); } catch (e) {}
     },
     updateUser: (state, action) => {
       state.user = { ...state.user, ...action.payload };
@@ -98,7 +106,8 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.loading = false;
         state.token = action.payload.token;
-        state.user = action.payload.utilisateur;
+        state.user = { ...action.payload.utilisateur, abonnementExpire: action.payload.abonnementExpire || false };
+        state.abonnementExpire = action.payload.abonnementExpire || false;
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
@@ -107,6 +116,7 @@ const authSlice = createSlice({
       .addCase(restoreSession.fulfilled, (state, action) => {
         state.token = action.payload.token;
         state.user = action.payload.utilisateur;
+        state.abonnementExpire = action.payload.abonnementExpire || false;
       });
   },
 });
